@@ -1,1 +1,104 @@
 @import "tailwindcss";
+
+/* 1. The Anchor (Managed by Marzipano) */
+/* This element is the "Target" - it should have NO size */
+/* 1. The Anchor: The mathematical point (0x0 size) */
+.hotspot-anchor {
+  position: absolute;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 2. The Visual: The icon shifted to be centered on the anchor */
+.hotspot-visual {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  
+  /* THIS PULLS IT BACK: 
+     -50% horizontally centers it on the anchor point.
+     -100% vertically places it 'standing' on the point. */
+  transform: translate(-50%, -100%) !important;
+  
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* 3. Toolbar (Above the icon) */
+.hotspot-toolbar {
+  position: absolute;
+  bottom: 52px; 
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  padding: 4px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  display: flex;
+  gap: 4px;
+  z-index: 1000;
+}
+
+.hotspot-toolbar::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
+}
+
+/* 4. Labels (Right of the icon) */
+.hotspot-label-wrapper {
+  position: absolute;
+  left: 48px; 
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  pointer-events: auto;
+}
+
+.hotspot-field {
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  backdrop-filter: blur(4px);
+  width: 110px;
+  font-size: 14px;
+}
+
+/* 5. Icon Styles */
+.hotspot-img {
+  width: 40px;
+  height: 40px;
+  cursor: grab;
+  border-radius: 50%;
+  -webkit-user-drag: none;
+}
+
+.hotspot-visual.dragging .hotspot-img {
+  cursor: grabbing;
+}
+
+/* 6. Buttons */
+.hotspot-btn {
+  border: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  transition: filter 0.2s;
+}
+
+.edit-btn { background: #3b82f6; }
+.del-btn { background: #ef4444; }
+.hotspot-btn:hover { filter: brightness(1.2); }
