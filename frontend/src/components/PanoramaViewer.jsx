@@ -1,12 +1,13 @@
 import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const PanoramaViewer = ({ imageUrl }) => {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
+  const [panoramas, setPanoramas] = useState([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -20,6 +21,7 @@ const PanoramaViewer = ({ imageUrl }) => {
     viewerRef.current = viewer;
 
     const source = Marzipano.ImageUrlSource.fromString(imageUrl);
+
     const levels = [
       { tileSize: 256, size: 256, fallbackOnly: true },
       { tileSize: 512, size: 512 },
@@ -65,9 +67,6 @@ const spawnHotspotAtCenter = () => {
     pitch: view.pitch()
   };
 
-  console.log(centerCoords);
-  
-
   // This is the absolute center of where the camera is pointing
   addHotspot(centerCoords);
 };
@@ -101,11 +100,18 @@ const spawnHotspotAtCenter = () => {
 
     const labelWrapper = document.createElement('div');
     labelWrapper.className = 'hotspot-label-wrapper';
+
     const title = document.createElement('input');
     title.type = 'text';
     title.className = 'hotspot-field hotspot-title';
     title.placeholder = 'Enter title...';
     labelWrapper.appendChild(title);
+
+    const shortDescription = document.createElement('input');
+    shortDescription.type = 'text';
+    shortDescription.className = 'hotspot-field';
+    shortDescription.placeholder = 'Enter short description...';
+    labelWrapper.appendChild(shortDescription);
 
     const img = document.createElement('img');
     img.src = redIcon;
@@ -177,21 +183,79 @@ const spawnHotspotAtCenter = () => {
     };
   };
 
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    
+    // Create local URLs for each file
+    const newPanos = files.map(file => ({
+      file,
+      previewUrl: URL.createObjectURL(file), // This creates the local link
+      id: Math.random().toString(36).substr(2, 9)
+    }));
+
+    setPanoramas((prev) => [...prev, ...newPanos]);
+};
+
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
       {/* SIDEBAR */}
-      <div style={{ width: "180px", background: "#222", color: "white", padding: "15px", zIndex: 99999 }}>
-        <p className="mb-4 text-sm font-bold">Add Hotspot:</p>
-        <div 
-          onClick={spawnHotspotAtCenter} // REPLACED: Drag with Click
-          style={{ width: "60px", cursor: "pointer", border: "2px solid #3b82f6", borderRadius: "8px", padding: "5px", background: "#333" }}
-          title="Click to add hotspot to center"
-        >
-          <img src={redIcon} style={{ width: '100%' }} alt="Red Icon" />
-        </div>
-        <p className="mt-2 text-xs opacity-50">Click icon to spawn at center of view</p>
+      <div 
+    style={{ width: "220px", background: "#1a1a1a", color: "white", padding: "20px", zIndex: 99999 }} 
+    className="flex flex-col gap-6 shadow-2xl rounded-l-lg border-l border-gray-800 min-h-screen overflow-y-auto"
+  >
+    {/* SECTION: HOTSPOTS */}
+    <section>
+      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Add Hotspot</h3>
+      <div 
+        onClick={spawnHotspotAtCenter}
+        className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
+      >
+        <img src={redIcon} className="w-10 h-10 transition-transform group-hover:scale-110" alt="Hotspot" />
       </div>
+    </section>
 
+    <hr className="border-zinc-800" />
+
+    {/* SECTION: UPLOAD & GALLERY */}
+    <section>
+      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Panorama Library</h3>
+      
+      {/* Upload Button */}
+      <label className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-colors mb-4">
+        + UPLOAD PANOS
+        <input 
+          type="file" 
+          multiple 
+          accept="image/*"
+          className="hidden" 
+          onChange={handleFileChange}
+        />
+      </label>
+
+      {/* Preview Grid */}
+      <div className="grid grid-cols-2 gap-2">
+        {panoramas.map((pano) => (
+          <div key={pano.id} className="relative group aspect-square rounded-md overflow-hidden bg-zinc-900 border border-zinc-700">
+            <img 
+              src={pano.previewUrl} 
+              alt="Preview" 
+              className="w-full h-full object-cover"
+            />
+            {/* Overlay on hover */}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+               <button className="text-[10px] bg-red-600 px-2 py-1 rounded">Set Active</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {panoramas.length === 0 && (
+        <p className="text-[10px] text-gray-600 text-center italic mt-2">No images uploaded yet</p>
+      )}
+
+    </section>
+    
+  </div>
       {/* VIEWER AREA */}
       <div 
         ref={containerRef} 

@@ -58,6 +58,7 @@
   transform: translateY(-50%);
   display: flex;
   pointer-events: auto;
+  flex-direction: column;
 }
 
 .hotspot-field {
