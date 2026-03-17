@@ -103,3 +103,7 @@
 .edit-btn { background: #3b82f6; }
 .del-btn { background: #ef4444; }
 .hotspot-btn:hover { filter: brightness(1.2); }
+
+ .rotate-btn {
+  background: #10b981; 
+ }

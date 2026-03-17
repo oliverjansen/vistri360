@@ -1,6 +1,7 @@
 import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
+import type from "marzipano/src/util/type";
 
 const PanoramaViewer = ({ imageUrl }) => {
   const containerRef = useRef(null);
@@ -8,6 +9,7 @@ const PanoramaViewer = ({ imageUrl }) => {
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
+  const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -68,21 +70,43 @@ const spawnHotspotAtCenter = () => {
   };
 
   // This is the absolute center of where the camera is pointing
-  addHotspot(centerCoords);
+  addHotspot(centerCoords,'hotspot');
 };
 
-  const addHotspot = (coords) => {
-    const activeScene = sceneRef.current;
-    const viewer = viewerRef.current;
-    if (!activeScene || !viewer) return;
+const spawnLinkHotspotAtCenter = () => {
+  const activeScene = sceneRef.current;
+  if (!activeScene) return;
 
-    const container = activeScene.hotspotContainer();
-    const anchor = document.createElement('div');
-    anchor.className = 'hotspot-anchor';
+  // INSTEAD of calculating pixels, just ask the VIEW where it is looking right now
+  const view = activeScene.view();
+  const centerCoords = {
+    yaw: view.yaw(),
+    pitch: view.pitch()
+  };
 
-    const visual = document.createElement('div');
-    visual.className = 'hotspot-visual';
+  // This is the absolute center of where the camera is pointing
+  addHotspot(centerCoords, 'link');
+};
 
+
+const addHotspot = (coords, hotspotType = 'hotspot') => {
+  const activeScene = sceneRef.current;
+  const viewer = viewerRef.current;
+  if (!activeScene || !viewer) return;
+
+  const container = activeScene.hotspotContainer();
+  const anchor = document.createElement('div');
+  anchor.className = 'hotspot-anchor';
+
+  const visual = document.createElement('div');
+  visual.className = 'hotspot-visual';
+
+  // These need to be accessible to the dragging logic later
+  let hotspotObject;
+  let interactionElement; // The thing the user clicks to drag (img or button)
+
+  // --- TYPE: STANDARD HOTSPOT ---
+  if (hotspotType === 'hotspot') {
     const controlsWrapper = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
     controlsWrapper.style.display = 'none';
@@ -120,45 +144,8 @@ const spawnHotspotAtCenter = () => {
     visual.appendChild(controlsWrapper);
     visual.appendChild(labelWrapper);
     visual.appendChild(img);
-    anchor.appendChild(visual);
 
-    const hotspotObject = container.createHotspot(anchor, { yaw: coords.yaw, pitch: coords.pitch });
-
-    // Keep dragging logic so they can move it AFTER it spawns
-    let isDragging = false;
-    let didMove = false;
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      didMove = true;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newCoords = activeScene.view().screenToCoordinates({ 
-        x: e.clientX - rect.left, 
-        y: e.clientY - rect.top 
-      });
-      if (newCoords) hotspotObject.setPosition(newCoords);
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-      visual.classList.remove('dragging');
-      viewer.controls().enable();
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      setTimeout(() => { didMove = false; }, 50);
-    };
-
-    img.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      isDragging = true;
-      visual.classList.add('dragging');
-      viewer.controls().disable();
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    });
-
+    // Interaction Logic for Standard Hotspot
     img.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!didMove) {
@@ -171,17 +158,138 @@ const spawnHotspotAtCenter = () => {
       }
     });
 
-    [title, controlsWrapper].forEach(el => {
-      el.addEventListener('click', (e) => e.stopPropagation());
-      el.addEventListener('mousedown', (e) => e.stopPropagation());
-    });
-
     delBtn.onclick = (e) => {
       e.stopPropagation();
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
     };
+
+    [title, controlsWrapper].forEach(el => {
+      el.addEventListener('click', (e) => e.stopPropagation());
+      el.addEventListener('mousedown', (e) => e.stopPropagation());
+    });
+
+    interactionElement = img; // We drag by the image
+  } 
+  
+  // --- TYPE: LINK HOTSPOT ---
+  else if (hotspotType === 'link') {
+  
+    const controlsWrapper  = document.createElement('div');
+    controlsWrapper.className = 'hotspot-toolbar';
+    controlsWrapper.style.display = 'none';
+
+    const linkNavigation = document.createElement('button');
+    linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
+    linkNavigation.style.outline = '2px solid white';
+    linkNavigation.style.outlineOffset = '-4px';
+    
+    linkNavigation.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="black" class="w-5 h-5 transition-transform duration-500">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+      </svg>
+    `;
+
+    let currentRotation = 0;
+
+    linkNavigation.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      if (openControlsRef.current && openControlsRef.current !== controlsWrapper) {
+        openControlsRef.current.style.display = 'none';
+      }
+      
+      if(!didMove){
+          const isHidden = controlsWrapper.style.display === 'none';
+          controlsWrapper.style.display = isHidden ? 'flex' : 'none';
+          openControlsRef.current = isHidden ? controlsWrapper : null;
+      }
+    });
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'hotspot-btn edit-btn';
+    editBtn.innerHTML = '✎';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'hotspot-btn del-btn';
+    delBtn.innerHTML = '✖';
+
+    const rotateLeftBtn = document.createElement('button');
+    rotateLeftBtn.className = 'hotspot-btn rotate-btn';
+    rotateLeftBtn.innerHTML = '⤾';
+
+    const rotateRightBtn = document.createElement('button');
+    rotateRightBtn.className = 'hotspot-btn rotate-btn';
+    rotateRightBtn.innerHTML = '⤿';
+
+    rotateLeftBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentRotation = (currentRotation - 60);
+      linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+    };
+
+    rotateRightBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentRotation = (currentRotation + 60);
+      linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+    }
+
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      container.destroyHotspot(hotspotObject);
+      if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
+    }
+
+
+    controlsWrapper.appendChild(editBtn);
+    controlsWrapper.appendChild(delBtn);
+    controlsWrapper.appendChild(rotateLeftBtn);
+    controlsWrapper.appendChild(rotateRightBtn);
+
+    visual.appendChild(linkNavigation);
+    visual.appendChild(controlsWrapper);
+
+    interactionElement = linkNavigation; // We drag by the button
+  }
+
+  anchor.appendChild(visual);
+  hotspotObject = container.createHotspot(anchor, { yaw: coords.yaw, pitch: coords.pitch });
+
+  // --- UNIVERSAL DRAGGING LOGIC ---
+  let isDragging = false;
+  let didMove = false;
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    didMove = true;
+    const rect = containerRef.current.getBoundingClientRect();
+    const newCoords = activeScene.view().screenToCoordinates({ 
+      x: e.clientX - rect.left, 
+      y: e.clientY - rect.top 
+    });
+    if (newCoords) hotspotObject.setPosition(newCoords);
   };
+
+  const onMouseUp = () => {
+    isDragging = false;
+    visual.classList.remove('dragging');
+    viewer.controls().enable();
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+    setTimeout(() => { didMove = false; }, 50);
+  };
+
+  interactionElement.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    isDragging = true;
+    visual.classList.add('dragging');
+    viewer.controls().disable();
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+};
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -195,6 +303,8 @@ const spawnHotspotAtCenter = () => {
 
     setPanoramas((prev) => [...prev, ...newPanos]);
 };
+
+const handleRotate = () => setRotation(prev => prev + 90);
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
@@ -211,6 +321,32 @@ const spawnHotspotAtCenter = () => {
         className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
       >
         <img src={redIcon} className="w-10 h-10 transition-transform group-hover:scale-110" alt="Hotspot" />
+      </div>
+    </section>
+
+     <section>
+      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Add Link Hotspot</h3>
+      <div 
+        onClick={spawnLinkHotspotAtCenter}
+        className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
+      >
+          <button
+          // onClick={spawnHotspotAtCenter}
+          className="group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm"
+          style={{ outline: '2px solid white', outlineOffset: '-4px' }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={3.5}
+            stroke="currentColor"
+            className="w-5 h-5 text-gray-900 transition-transform duration-500"
+            // style={{ transform: `rotate(${rotation}deg)` }}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+          </svg>
+        </button>
       </div>
     </section>
 
