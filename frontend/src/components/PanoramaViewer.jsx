@@ -8,6 +8,7 @@ const PanoramaViewer = ({ imageUrl }) => {
   const sceneRef = useRef(null);
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
+  const openControlImageRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
   const [rotation, setRotation] = useState(0);
 
@@ -170,14 +171,13 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     });
 
     interactionElement = img; // We drag by the image
-  } 
-  
-  // --- TYPE: LINK HOTSPOT ---
-  else if (hotspotType === 'link') {
+
+  } else if (hotspotType === 'link') {// --- TYPE: LINK HOTSPOT ---
   
     const controlsWrapper  = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
     controlsWrapper.style.display = 'none';
+
 
     const linkNavigation = document.createElement('button');
     linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
@@ -196,13 +196,13 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
       e.stopPropagation();
 
       if (openControlsRef.current && openControlsRef.current !== controlsWrapper) {
-        openControlsRef.current.style.display = 'none';
+          openControlsRef.current.style.display = 'none';
       }
       
       if(!didMove){
-          const isHidden = controlsWrapper.style.display === 'none';
-          controlsWrapper.style.display = isHidden ? 'flex' : 'none';
-          openControlsRef.current = isHidden ? controlsWrapper : null;
+        const isHidden = controlsWrapper.style.display === 'none';
+        controlsWrapper.style.display = isHidden ? 'flex' : 'none';
+        openControlsRef.current = isHidden ? controlsWrapper : null;
       }
     });
 
@@ -240,6 +240,24 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
     }
 
+    //images 
+    const ImagesContainer  = document.createElement('div');
+    ImagesContainer.className = 'hotspot-toolbar-images';
+
+    //create image wrapper
+    const imageWrapper = document.createElement('div');
+    imageWrapper.className = 'hotspot-image-wrapper';
+
+    const image = document.createElement('img');
+    image.src = redIcon;
+
+     const image2 = document.createElement('img');
+      image2.src = redIcon;
+    // image.className = 'hotspot-img';
+
+    imageWrapper.appendChild(image2);
+    imageWrapper.appendChild(image);
+    ImagesContainer.appendChild(imageWrapper);
 
     controlsWrapper.appendChild(editBtn);
     controlsWrapper.appendChild(delBtn);
@@ -248,8 +266,10 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
 
     visual.appendChild(linkNavigation);
     visual.appendChild(controlsWrapper);
+    visual.appendChild(ImagesContainer);
 
     interactionElement = linkNavigation; // We drag by the button
+
   }
 
   anchor.appendChild(visual);
