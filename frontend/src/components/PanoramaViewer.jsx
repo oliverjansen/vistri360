@@ -2,19 +2,61 @@ import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
 import type from "marzipano/src/util/type";
+import { fetchHotSpot } from "../api/hotspotService";
+import {fetchProject} from "../api/ProjectService";
+import { request } from "../api/apiConfig";
+import { useUploadPanoramas } from "../hooks/useUploadPanorama";
+import Loading from "./Loading";
+import { storageFormat } from "../utils/Formats"; 
+
 
 const PanoramaViewer = ({ imageUrl }) => {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
+  const sceneMapRef = useRef({}); // Stores ALL created Marzipano scenes by ID
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
   const openControlImageRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
   const [rotation, setRotation] = useState(0);
 
+
+ const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
+  
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const fetchProjectData = async (id = 1) => {
+      try {
+        const projectData = await fetchProject(id);
+        const hotspots = projectData?.data?.hotspots;
+
+        if (hotspots && hotspots.length > 0) {
+          // 1. Flatten all images from all hotspots into one single array first
+          // We use .flatMap to handle the nested arrays
+          const allIncomingImages = hotspots.flatMap(h => h.hotspot_image || []);
+
+          setPanoramas((prev) => {
+            // 2. Get existing IDs for comparison
+            const existingIds = new Set(prev.map(item => item.id));
+
+            // 3. Filter the incoming images to find only the new ones
+            const uniqueNewImages = allIncomingImages.filter(
+              (img) => !existingIds.has(img.id)
+            );
+
+            // 4. Return the merged array
+            return [...prev, ...uniqueNewImages];
+
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching the ProjectData', error);
+      }
+    };
+
+    fetchProjectData();
+    
     const viewerOpts = {
       controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
       stageType: "webgl",
@@ -178,7 +220,6 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     controlsWrapper.className = 'hotspot-toolbar';
     controlsWrapper.style.display = 'none';
 
-
     const linkNavigation = document.createElement('button');
     linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
     linkNavigation.style.outline = '2px solid white';
@@ -222,6 +263,11 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     rotateRightBtn.className = 'hotspot-btn rotate-btn';
     rotateRightBtn.innerHTML = '⤿';
 
+    //next scene
+    const nextSceneBtn = document.createElement('button');
+    nextSceneBtn.className = 'hotspot-btn next-scene-btn';
+    nextSceneBtn.innerHTML = '➜]';
+
     rotateLeftBtn.onclick = (e) => {
       e.stopPropagation();
       currentRotation = (currentRotation - 60);
@@ -248,21 +294,35 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     const imageWrapper = document.createElement('div');
     imageWrapper.className = 'hotspot-image-wrapper';
 
-    const image = document.createElement('img');
-    image.src = redIcon;
+    
+    const images = panoramas.map((panorama) => {
+        const image = document.createElement('img');
+        image.className = 'hover:scale-105 transition cursor-pointer';
+        image.key = panorama.id;
+        image.src = storageFormat(panorama.image_path);
 
-     const image2 = document.createElement('img');
-      image2.src = redIcon;
-    // image.className = 'hotspot-img';
+        //image
+        image.addEventListener('click',(e)=>{
+          e.stopPropagation();
+          if (panorama.sceneInstance) {
+            panorama.sceneInstance.switchTo();
+          }
+        });
+    
+        return image;
+    });
 
-    imageWrapper.appendChild(image2);
-    imageWrapper.appendChild(image);
+    images.forEach(image => {
+      imageWrapper.appendChild(image);
+    });
+    
     ImagesContainer.appendChild(imageWrapper);
 
     controlsWrapper.appendChild(editBtn);
     controlsWrapper.appendChild(delBtn);
     controlsWrapper.appendChild(rotateLeftBtn);
     controlsWrapper.appendChild(rotateRightBtn);
+    controlsWrapper.appendChild(nextSceneBtn);
 
     visual.appendChild(linkNavigation);
     visual.appendChild(controlsWrapper);
@@ -311,17 +371,28 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
   });
 };
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    
-    // Create local URLs for each file
-    const newPanos = files.map(file => ({
-      file,
-      previewUrl: URL.createObjectURL(file), // This creates the local link
-      id: Math.random().toString(36).substr(2, 9)
-    }));
+const handleFileChange = async (e) => {
+  const files = Array.from(e.target.files);
 
-    setPanoramas((prev) => [...prev, ...newPanos]);
+  if (files.length === 0) return;
+
+  try {
+
+    const response = await uploadPanoramas(files, 1, 1);
+
+    setPanoramas((prev) => {
+      const existingIdsArray = prev.map(item => item.id);
+      const uniquenewImages = response.data.filter((image) => 
+        !existingIdsArray.includes(image.id)
+      );
+      return [...prev, ...uniquenewImages];
+    });
+
+  
+  } catch (error) {
+    console.error(error);
+  }
+
 };
 
 const handleRotate = () => setRotation(prev => prev + 90);
@@ -377,8 +448,18 @@ const handleRotate = () => setRotation(prev => prev + 90);
       <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Panorama Library</h3>
       
       {/* Upload Button */}
-      <label className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-colors mb-4">
-        + UPLOAD PANOS
+      <label className="flex items-center justify-center gap-2 w-full h-[35px] py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-colors mb-4">
+       {isLoading ? (
+        <>
+      {/* THE SPINNER */}
+        <Loading/>
+          <span>UPLOADING PANOS...</span>
+        </>
+       ) : (
+        <>
+        <span>+ UPLOAD 360 VIEWS</span>
+      </>
+       ) }
         <input 
           type="file" 
           multiple 
@@ -388,25 +469,28 @@ const handleRotate = () => setRotation(prev => prev + 90);
         />
       </label>
 
-      {/* Preview Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        {panoramas.map((pano) => (
-          <div key={pano.id} className="relative group aspect-square rounded-md overflow-hidden bg-zinc-900 border border-zinc-700">
-            <img 
-              src={pano.previewUrl} 
-              alt="Preview" 
-              className="w-full h-full object-cover"
-            />
-            {/* Overlay on hover */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-               <button className="text-[10px] bg-red-600 px-2 py-1 rounded">Set Active</button>
-            </div>
-          </div>
-        ))}
-      </div>
       
-      {panoramas.length === 0 && (
+      {panoramas.length === 0 ? (
         <p className="text-[10px] text-gray-600 text-center italic mt-2">No images uploaded yet</p>
+            ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {panoramas.map((panorama) => {
+
+                return (
+                    <div key={panorama.id} className="p-2 border border-zinc-700 rounded">
+                      <img 
+                        src={storageFormat(panorama.image_path)} 
+                        alt="Panorama View"
+                        className="w-full h-auto rounded"
+                        // Troubleshooting tip: log if the specific image fails to load
+                        onError={() => console.error(`Failed to load image at: ${fullImagePath}`)}
+                      />
+                      <p className="text-[10px] mt-1 text-center">ID: {panorama.id}</p>
+                    </div>
+                  );
+
+                })}
+            </div>
       )}
 
     </section>

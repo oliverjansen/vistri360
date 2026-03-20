@@ -9,4 +9,8 @@ class Hotspot extends Model
     public function hotspotImage(){
         return $this->hasMany(HotspotImage::class);
     }
+    public function project()
+    {
+        return $this->belongsTo(Project::class);
+    }
 }

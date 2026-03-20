@@ -148,3 +148,7 @@
   height: 50px;
   cursor: pointer;
 }
+
+.next-scene-btn {
+  background: #3b82f6;
+}
