@@ -11,4 +11,22 @@ export const fetchHotSpot = async () => {
 }
 
 
+export const saveHotspots = async(payload) => {
+    try {
+        const data = await request('projects/hotspots/updateHotspost',{
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body:JSON.stringify(payload)
+        });
+
+        return data;
+    } catch (error) {
+        console.log('Error saving Coordinates', error);
+        throw error;
+    }
+}
+
+
 

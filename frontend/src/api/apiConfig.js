@@ -8,7 +8,10 @@ export const request = async (endpoint, options = {}) => {
 
     const config = {
         method: 'GET',
-        // headers:{'Content-Type': 'application/json'},
+        headers:{
+            'Accept': 'application/json',
+            ...(customConfig.headers || {}),
+        },
         signal,
         ...customConfig,
     };

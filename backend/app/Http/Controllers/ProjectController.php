@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
+use App\Models\ProjectImage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ProjectController extends Controller
 {
@@ -11,7 +14,7 @@ class ProjectController extends Controller
 
         try {
 
-            $project = Project::with('hotspots.hotspotImage')->find($id);
+            $project = Project::with('projectImages','hotspots.image')->find($id);
 
             return response()->json([
                 'message' => 'Project retrieved successfully',
@@ -24,4 +27,5 @@ class ProjectController extends Controller
         }
 
     }
+
 }

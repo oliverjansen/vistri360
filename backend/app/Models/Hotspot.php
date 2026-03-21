@@ -13,4 +13,7 @@ class Hotspot extends Model
     {
         return $this->belongsTo(Project::class);
     }
+    public function image(){
+        return $this->belongsTo(ProjectImage::class);
+    }
 }

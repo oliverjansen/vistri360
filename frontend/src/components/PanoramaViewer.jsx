@@ -2,7 +2,7 @@ import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
 import type from "marzipano/src/util/type";
-import { fetchHotSpot } from "../api/hotspotService";
+import { fetchHotSpot , saveHotspots} from "../api/hotspotService";
 import {fetchProject} from "../api/ProjectService";
 import { request } from "../api/apiConfig";
 import { useUploadPanoramas } from "../hooks/useUploadPanorama";
@@ -18,7 +18,10 @@ const PanoramaViewer = ({ imageUrl }) => {
   const openControlsRef = useRef(null);
   const openControlImageRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
+  const [hotspots, setHotspots] = useState([]);
   const [rotation, setRotation] = useState(0);
+  const [isProjectFetchingLoading, setIsProjectFetchingLoading] = useState(false);
+  const clickedObjectIDRef = useRef(null);
 
 
  const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
@@ -26,36 +29,8 @@ const PanoramaViewer = ({ imageUrl }) => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const fetchProjectData = async (id = 1) => {
-      try {
-        const projectData = await fetchProject(id);
-        const hotspots = projectData?.data?.hotspots;
-
-        if (hotspots && hotspots.length > 0) {
-          // 1. Flatten all images from all hotspots into one single array first
-          // We use .flatMap to handle the nested arrays
-          const allIncomingImages = hotspots.flatMap(h => h.hotspot_image || []);
-
-          setPanoramas((prev) => {
-            // 2. Get existing IDs for comparison
-            const existingIds = new Set(prev.map(item => item.id));
-
-            // 3. Filter the incoming images to find only the new ones
-            const uniqueNewImages = allIncomingImages.filter(
-              (img) => !existingIds.has(img.id)
-            );
-
-            // 4. Return the merged array
-            return [...prev, ...uniqueNewImages];
-
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching the ProjectData', error);
-      }
-    };
-
-    fetchProjectData();
+    //fetch data
+    handleFetchProjectData();
     
     const viewerOpts = {
       controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
@@ -114,6 +89,7 @@ const spawnHotspotAtCenter = () => {
 
   // This is the absolute center of where the camera is pointing
   addHotspot(centerCoords,'hotspot');
+  
 };
 
 const spawnLinkHotspotAtCenter = () => {
@@ -133,8 +109,11 @@ const spawnLinkHotspotAtCenter = () => {
 
 
 const addHotspot = (coords, hotspotType = 'hotspot') => {
+
   const activeScene = sceneRef.current;
   const viewer = viewerRef.current;
+  let newHotspot = { ...coords, unique_id: Date.now()};
+
   if (!activeScene || !viewer) return;
 
   const container = activeScene.hotspotContainer();
@@ -147,9 +126,13 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
   // These need to be accessible to the dragging logic later
   let hotspotObject;
   let interactionElement; // The thing the user clicks to drag (img or button)
+  let clickedObjectID = null;
 
   // --- TYPE: STANDARD HOTSPOT ---
   if (hotspotType === 'hotspot') {
+
+    newHotspot = { ...newHotspot, type: 'INFO' };
+
     const controlsWrapper = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
     controlsWrapper.style.display = 'none';
@@ -198,13 +181,20 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
         const isHidden = controlsWrapper.style.display === 'none';
         controlsWrapper.style.display = isHidden ? 'flex' : 'none';
         openControlsRef.current = isHidden ? controlsWrapper : null;
+        
+        //ref for current selected object
+        clickedObjectIDRef.current = hotspotObject.position();
       }
     });
 
     delBtn.onclick = (e) => {
       e.stopPropagation();
+
+      removeHotspotHook();
+
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
+
     };
 
     [title, controlsWrapper].forEach(el => {
@@ -215,7 +205,9 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     interactionElement = img; // We drag by the image
 
   } else if (hotspotType === 'link') {// --- TYPE: LINK HOTSPOT ---
-  
+    
+   newHotspot = { ...newHotspot, type: 'LINK' };
+
     const controlsWrapper  = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
     controlsWrapper.style.display = 'none';
@@ -245,6 +237,9 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
         controlsWrapper.style.display = isHidden ? 'flex' : 'none';
         openControlsRef.current = isHidden ? controlsWrapper : null;
       }
+
+      //ref for current selected object
+      clickedObjectIDRef.current = hotspotObject.position();
     });
 
     const editBtn = document.createElement('button');
@@ -284,6 +279,8 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
       e.stopPropagation();
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
+
+      removeHotspotHook();
     }
 
     //images 
@@ -333,7 +330,11 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
   }
 
   anchor.appendChild(visual);
-  hotspotObject = container.createHotspot(anchor, { yaw: coords.yaw, pitch: coords.pitch });
+  hotspotObject = container.createHotspot(anchor, newHotspot);
+
+  const newHotspotss = hotspotObject;
+
+  setHotspotHook(newHotspotss.position());
 
   // --- UNIVERSAL DRAGGING LOGIC ---
   let isDragging = false;
@@ -347,6 +348,7 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
       x: e.clientX - rect.left, 
       y: e.clientY - rect.top 
     });
+
     if (newCoords) hotspotObject.setPosition(newCoords);
   };
 
@@ -357,6 +359,12 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);
     setTimeout(() => { didMove = false; }, 50);
+    
+    //get final position after moved
+    const finalPositionafterMoved = hotspotObject.position();
+
+    setHotspotHook(finalPositionafterMoved);
+
   };
 
   interactionElement.addEventListener('mousedown', (e) => {
@@ -378,13 +386,14 @@ const handleFileChange = async (e) => {
 
   try {
 
-    const response = await uploadPanoramas(files, 1, 1);
+    const response = await uploadPanoramas(files, 1);
 
     setPanoramas((prev) => {
       const existingIdsArray = prev.map(item => item.id);
       const uniquenewImages = response.data.filter((image) => 
         !existingIdsArray.includes(image.id)
       );
+
       return [...prev, ...uniquenewImages];
     });
 
@@ -395,7 +404,85 @@ const handleFileChange = async (e) => {
 
 };
 
-const handleRotate = () => setRotation(prev => prev + 90);
+//function
+const setHotspotHook = (newHotspot) => {
+  setHotspots((prev) => {
+    const exists = prev.some(h => h.unique_id === newHotspot.unique_id);
+    
+    if (exists) {
+      // MERGE instead of REPLACE to keep metadata (titles, links, etc.)
+      return prev.map(h => 
+        h.unique_id === newHotspot.unique_id ? { ...h, ...newHotspot } : h
+      );
+    } 
+  
+    // INSERT brand new hotspot
+    return [...prev, newHotspot];
+  });
+};
+
+const removeHotspotHook = () => {
+  setHotspots((prev) => prev.filter((loopHotspot) => loopHotspot.unique_id !== clickedObjectIDRef.current.unique_id));
+}
+
+const handleSaveHotspot = async() => {
+
+  try {
+
+   if(hotspots.length <= 0 ) return;
+
+    const payload = {
+      hotspots : hotspots.map(function (hotspot) {
+            return {
+              project_id: 1,
+              image_Id : hotspot.image_id ?? null,
+              unique_id: hotspot.unique_id,
+              details: hotspot
+            }
+        })
+    }
+
+    //save
+    await saveHotspots(payload);
+    
+  } catch (error) {
+    console.log(error);
+    throw error;
+  } 
+
+}
+
+  const handleFetchProjectData = async (id = 1) => {
+      try {
+        setIsProjectFetchingLoading(true);
+        const projectData = await fetchProject(id);
+        const projectImages = projectData?.data?.project_images;
+
+        if (projectImages && projectImages.length > 0) {
+          // 1. Flatten all images from all hotspots into one single array first
+          // We use .flatMap to handle the nested arrays
+          const allIncomingImages = projectImages.map(h => h || []);
+
+          setPanoramas((prev) => {
+            // 2. Get existing IDs for comparison
+            const existingIds = new Set(prev.map(item => item.id));
+
+            // 3. Filter the incoming images to find only the new ones
+            const uniqueNewImages = allIncomingImages.filter(
+              (img) => !existingIds.has(img.id)
+            );
+
+            // 4. Return the merged array
+            return [...prev, ...uniqueNewImages];
+
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching the ProjectData', error);
+      } finally{
+        setIsProjectFetchingLoading(true);
+      }
+  };
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
@@ -448,53 +535,55 @@ const handleRotate = () => setRotation(prev => prev + 90);
       <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Panorama Library</h3>
       
       {/* Upload Button */}
-      <label className="flex items-center justify-center gap-2 w-full h-[35px] py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-colors mb-4">
-       {isLoading ? (
-        <>
-      {/* THE SPINNER */}
-        <Loading/>
-          <span>UPLOADING PANOS...</span>
-        </>
-       ) : (
-        <>
-        <span>+ UPLOAD 360 VIEWS</span>
-      </>
-       ) }
-        <input 
-          type="file" 
-          multiple 
-          accept="image/*"
-          className="hidden" 
-          onChange={handleFileChange}
-        />
-      </label>
+     <label className="relative flex items-center justify-center gap-2 w-full h-[35px] py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-all duration-300 mb-4 overflow-hidden">
+              {/* 1. THE SPINNER LAYER */}
+              <Loading isLoading={isLoading} />
+              <span>+ UPLOAD 360 VIEWS</span>
+              <input 
+                type="file" 
+                multiple 
+                disabled={isLoading} // Professional touch: disable while uploading
+                accept="image/*"
+                className="hidden" 
+                onChange={handleFileChange}
+              />
+            </label>
+         
 
-      
-      {panoramas.length === 0 ? (
-        <p className="text-[10px] text-gray-600 text-center italic mt-2">No images uploaded yet</p>
-            ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {panoramas.map((panorama) => {
-
-                return (
-                    <div key={panorama.id} className="p-2 border border-zinc-700 rounded">
-                      <img 
-                        src={storageFormat(panorama.image_path)} 
-                        alt="Panorama View"
-                        className="w-full h-auto rounded"
-                        // Troubleshooting tip: log if the specific image fails to load
-                        onError={() => console.error(`Failed to load image at: ${fullImagePath}`)}
-                      />
-                      <p className="text-[10px] mt-1 text-center">ID: {panorama.id}</p>
+                {panoramas.length === 0 ? (
+                    <div className="relative items-center justify-center">
+                      <Loading isLoading={isProjectFetchingLoading} />                     
                     </div>
-                  );
+                    ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {panoramas.map((panorama) => {
 
-                })}
-            </div>
-      )}
+                        return (
+                            <div key={panorama.id} className="p-2 border border-zinc-700 rounded">
+                              <img 
+                                src={storageFormat(panorama.image_path)} 
+                                alt="Panorama View"
+                                className="w-full h-auto rounded"
+                                // Troubleshooting tip: log if the specific image fails to load
+                                onError={() => console.error(`Failed to load image at: ${fullImagePath}`)}
+                              />
+                              <p className="text-[10px] mt-1 text-center">ID: {panorama.id}</p>
+                            </div>
+                          );
 
+                        })}
+                    </div>
+              )}
     </section>
-    
+
+    <section>
+      <button 
+        onClick={handleSaveHotspot} 
+        className="bg-indigo-600 hover:bg-indigo-700 text-white "
+          >
+        Sync Changes
+      </button>
+    </section>
   </div>
       {/* VIEWER AREA */}
       <div 

@@ -1,22 +1,16 @@
 import { useState } from "react";
-import { AddPanoramas } from "../api/HotspotImageService"
+import { AddPanoramas } from "../api/ProjectService"
 
 export const useUploadPanoramas = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
 
-    const uploadPanoramas = async(files, projectId, hotspotId) => {
+    const uploadPanoramas = async(files, projectId) => {
         try {
             setIsLoading(true);
-            const response = await AddPanoramas(files, projectId, hotspotId);
+            const response = await AddPanoramas(files, projectId);
 
-            const data = (typeof response.json === 'function') ? await response.json() : response;
-
-            if(response.status && !response.ok){
-                throw new error(data.message || 'Server Error');
-            }
-
-            return data;
+            return response;
 
         } catch (error) {
             console.error('Error in Uploading Panoramas', error);
