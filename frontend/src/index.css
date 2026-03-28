@@ -50,6 +50,32 @@
   border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
 }
 
+
+.hotspot-toolbar-images {
+  position: absolute;
+  top: 52px; 
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  padding: 4px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  display: flex;
+  gap: 4px;
+  z-index: 1000;
+}
+
+.hotspot-toolbar-images::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color:  transparent transparent rgba(0, 0, 0, 0.85) transparent;
+}
+
 /* 4. Labels (Right of the icon) */
 .hotspot-label-wrapper {
   position: absolute;
@@ -103,3 +129,26 @@
 .edit-btn { background: #3b82f6; }
 .del-btn { background: #ef4444; }
 .hotspot-btn:hover { filter: brightness(1.2); }
+
+ .rotate-btn {
+  background: #10b981; 
+ }
+
+
+.hotspot-image-wrapper {
+  display: grid;
+  grid-template-rows: auto auto; 
+  grid-template-columns: 1fr; 
+  gap: 5px; /* Optional: adds space between the two images */
+  width: max-content; /* Optional: keeps the wrapper tight around the images */
+}
+
+.hotspot-image-wrapper img {
+  width: 150px; /* Or whatever size you need your redIcon to be */
+  height: 50px;
+  cursor: pointer;
+}
+
+.next-scene-btn {
+  background: #3b82f6;
+}

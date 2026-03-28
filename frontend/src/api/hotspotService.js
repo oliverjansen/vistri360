@@ -1,0 +1,31 @@
+import {request} from "./apiConfig";
+
+export const getHotSpot = async (payload) => {
+    try {
+        const payloadBuilder = new URLSearchParams(payload).toString();
+        const data = await request(`projects/hotspots/?${payloadBuilder}`); // GET hotspots
+        return data;
+    } catch (error) {
+        console.error('Error Fetching Hotspot', error);
+        throw error;
+    }
+}
+
+
+export const saveHotspots = async(payload) => {
+    try {
+        const data = await request('projects/hotspots/updateHotspost',{
+            method: 'PUT',
+            body:JSON.stringify(payload)
+        });
+
+        return data;
+        
+    } catch (error) {
+        console.log('Error saving Coordinates', error);
+        throw error;
+    }
+}
+
+
+

@@ -1,39 +1,45 @@
 <?php
 
 namespace App\Http\Controllers;
-
-use App\Models\HotspotImage;
 use Illuminate\Http\Request;
+use App\Models\ProjectImage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class HotspotImageController extends Controller
+class ProjectImageController extends Controller
 {
-    public function index (){
-        try {
+    public function index(){
 
-            $data = HotspotImage::where('project_id',1 )->get();
+        $projectId = request('projectId');
+        try {
+            //asda
+            $data = ProjectImage::where('project_id', $projectId)->get();
 
             return response()->json([
-                'message' => 'Successfully retreived the hotspot images',
                 'data' => $data
             ]);
 
+
         } catch (\Throwable $th) {
-            Log::error('Error retreiving hotspot image'. $th->getMessage());
+            Log::error('Error retrival of Project Images' . $th->getMessage());
+
             return response()->json([
-                'message' => 'Error retreiving hotspot image'. $th->getMessage(),
-            ]);
+                'message' => 'Error retrival of Project Images'
+            ], 500);
         }
     }
-    public function upload(Request $request) // Type-hinting Request is safer for files
+     public function upload(Request $request) // Type-hinting Request is safer for files
     {
+
+        DB::beginTransaction();
+
         try {
+
 
             $request->validate([
                 'panoramas'   => 'required|array',
                 'panoramas.*' => 'required|file|mimes:jpg,jpeg,png|max:10240',
                 'project_id'  => 'required|integer|exists:projects,id',
-                'hotspot_id'  => 'required|integer|exists:hotspots,id',
             ]);
 
             if(!public_path('storage')){
@@ -55,25 +61,23 @@ class HotspotImageController extends Controller
                 // store() would try to find a disk named after your filename!
                 $path = $pano->storeAs('panoramas', $fileName,'public');
 
-                log::info($path);
+                Log::info($path);
 
 
                 $imageData[] = [
-                    'hotspot_id' => $request->hotspot_id,
                     'project_id' => $request->project_id,
                     'image_path'  => $path,
-                    'created_at' => $now, // Required for Bulk Insert
-                    'updated_at' => $now,
                 ];
             }
 
-            // Use a Transaction: if one fails, none are saved
-            \DB::transaction(function () use ($imageData) {
-                HotspotImage::insert($imageData);
-            });
+
+            //save project
+            ProjectImage::insert($imageData);
 
             // Fetch the updated list for this specific hotspot
-            $data = HotspotImage::where('hotspot_id', $request->hotspot_id)->get();
+            $data = ProjectImage::where('project_id', $request->project_id)->get();
+
+            DB::commit();
 
             return response()->json([
                 'message' => 'Images uploaded and recorded successfully',
@@ -81,11 +85,11 @@ class HotspotImageController extends Controller
             ]);
 
         } catch (\Throwable $th) {
+            DB::rollBack();
             Log::error('Error uploading image: ' . $th->getMessage());
             return response()->json([
                 'message' => 'Server Error: ' . $th->getMessage(),
             ], 500);
         }
     }
-
 }

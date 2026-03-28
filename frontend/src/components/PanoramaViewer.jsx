@@ -1,17 +1,45 @@
 import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
+import type from "marzipano/src/util/type";
+import { getHotSpot , saveHotspots} from "../api/hotspotService";
+import {fetchProject} from "../api/ProjectService";
+import { request } from "../api/apiConfig";
+import { useUploadPanoramas } from "../hooks/useUploadPanorama";
+import Loading from "./Loading";
+import { storageFormat } from "../utils/Formats"; 
+import { showPanorama, getPanoramas } from "../api/PanoramaService";
+
 
 const PanoramaViewer = ({ imageUrl }) => {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
+  const sceneMapRef = useRef({}); // Stores ALL created Marzipano scenes by ID
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
+  const openControlImageRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
+  const [hotspots, setHotspots] = useState([]);
+  const [rotation, setRotation] = useState(0);
+  const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
+  const clickedObjectIDRef = useRef(null);
+  const count = useRef(0);
 
+
+ const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
+  
   useEffect(() => {
     if (!containerRef.current) return;
 
+    //fetch data
+    handleGetPanoramas();
+
+    //fetch hotspot details
+    handleGetHotspots();
+
+    //handled displaying hotspot from db
+    // handleDisplayHotspotFromDB();
+    
     const viewerOpts = {
       controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
       stageType: "webgl",
@@ -68,20 +96,52 @@ const spawnHotspotAtCenter = () => {
   };
 
   // This is the absolute center of where the camera is pointing
-  addHotspot(centerCoords);
+  addHotspot(centerCoords,'INFO');
+  
 };
 
-  const addHotspot = (coords) => {
-    const activeScene = sceneRef.current;
-    const viewer = viewerRef.current;
-    if (!activeScene || !viewer) return;
+const spawnLinkHotspotAtCenter = () => {
+  const activeScene = sceneRef.current;
+  if (!activeScene) return;
 
-    const container = activeScene.hotspotContainer();
-    const anchor = document.createElement('div');
-    anchor.className = 'hotspot-anchor';
+  // INSTEAD of calculating pixels, just ask the VIEW where it is looking right now
+  const view = activeScene.view();
+  const centerCoords = {
+    yaw: view.yaw(),
+    pitch: view.pitch()
+  };
 
-    const visual = document.createElement('div');
-    visual.className = 'hotspot-visual';
+  // This is the absolute center of where the camera is pointing
+  addHotspot(centerCoords, 'LINK');
+};
+
+
+const addHotspot = (coords, hotspotType = 'INFO') => {
+
+  const activeScene = sceneRef.current;
+  const viewer = viewerRef.current;
+  const unique_id = coords.unique_id ?? Date.now();
+
+  let newHotspot = { ...coords, unique_id};
+
+  if (!activeScene || !viewer) return;
+
+  const container = activeScene.hotspotContainer();
+  const anchor = document.createElement('div');
+  anchor.className = 'hotspot-anchor';
+
+  const visual = document.createElement('div');
+  visual.className = 'hotspot-visual';
+
+  // These need to be accessible to the dragging logic later
+  let hotspotObject;
+  let interactionElement; // The thing the user clicks to drag (img or button)
+  let clickedObjectID = null;
+
+  // --- TYPE: STANDARD HOTSPOT ---
+  if (hotspotType === 'INFO') {
+
+    newHotspot = { ...newHotspot, type: 'INFO' };
 
     const controlsWrapper = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
@@ -120,45 +180,8 @@ const spawnHotspotAtCenter = () => {
     visual.appendChild(controlsWrapper);
     visual.appendChild(labelWrapper);
     visual.appendChild(img);
-    anchor.appendChild(visual);
 
-    const hotspotObject = container.createHotspot(anchor, { yaw: coords.yaw, pitch: coords.pitch });
-
-    // Keep dragging logic so they can move it AFTER it spawns
-    let isDragging = false;
-    let didMove = false;
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      didMove = true;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newCoords = activeScene.view().screenToCoordinates({ 
-        x: e.clientX - rect.left, 
-        y: e.clientY - rect.top 
-      });
-      if (newCoords) hotspotObject.setPosition(newCoords);
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-      visual.classList.remove('dragging');
-      viewer.controls().enable();
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      setTimeout(() => { didMove = false; }, 50);
-    };
-
-    img.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      isDragging = true;
-      visual.classList.add('dragging');
-      viewer.controls().disable();
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    });
-
+    // Interaction Logic for Standard Hotspot
     img.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!didMove) {
@@ -168,33 +191,379 @@ const spawnHotspotAtCenter = () => {
         const isHidden = controlsWrapper.style.display === 'none';
         controlsWrapper.style.display = isHidden ? 'flex' : 'none';
         openControlsRef.current = isHidden ? controlsWrapper : null;
+        
+        //ref for current selected object
+        clickedObjectIDRef.current = hotspotObject.position();
       }
     });
+
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+
+      removeHotspotHook();
+
+      container.destroyHotspot(hotspotObject);
+      if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
+
+    };
 
     [title, controlsWrapper].forEach(el => {
       el.addEventListener('click', (e) => e.stopPropagation());
       el.addEventListener('mousedown', (e) => e.stopPropagation());
     });
 
+    interactionElement = img; // We drag by the image
+
+  } else if (hotspotType === 'LINK') {// --- TYPE: LINK HOTSPOT ---
+    
+   newHotspot = { ...newHotspot, type: 'LINK' };
+
+    const controlsWrapper  = document.createElement('div');
+    controlsWrapper.className = 'hotspot-toolbar';
+    controlsWrapper.style.display = 'none';
+
+    const linkNavigation = document.createElement('button');
+    linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
+    linkNavigation.style.outline = '2px solid white';
+    linkNavigation.style.outlineOffset = '-4px';
+    
+    linkNavigation.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="black" class="w-5 h-5 transition-transform duration-500">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+      </svg>
+    `;
+
+    let currentRotation = 0;
+
+    linkNavigation.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      if (openControlsRef.current && openControlsRef.current !== controlsWrapper) {
+          openControlsRef.current.style.display = 'none';
+      }
+      
+      if(!didMove){
+        const isHidden = controlsWrapper.style.display === 'none';
+        controlsWrapper.style.display = isHidden ? 'flex' : 'none';
+        openControlsRef.current = isHidden ? controlsWrapper : null;
+      }
+
+      //ref for current selected object
+      clickedObjectIDRef.current = hotspotObject.position();
+    });
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'hotspot-btn edit-btn';
+    editBtn.innerHTML = '✎';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'hotspot-btn del-btn';
+    delBtn.innerHTML = '✖';
+
+    const rotateLeftBtn = document.createElement('button');
+    rotateLeftBtn.className = 'hotspot-btn rotate-btn';
+    rotateLeftBtn.innerHTML = '⤾';
+
+    const rotateRightBtn = document.createElement('button');
+    rotateRightBtn.className = 'hotspot-btn rotate-btn';
+    rotateRightBtn.innerHTML = '⤿';
+
+    //next scene
+    const nextSceneBtn = document.createElement('button');
+    nextSceneBtn.className = 'hotspot-btn next-scene-btn';
+    nextSceneBtn.innerHTML = '➜]';
+
+    rotateLeftBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentRotation = (currentRotation - 60);
+      linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+    };
+
+    rotateRightBtn.onclick = (e) => {
+      e.stopPropagation();
+      currentRotation = (currentRotation + 60);
+      linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+    }
+
     delBtn.onclick = (e) => {
       e.stopPropagation();
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
-    };
+
+      removeHotspotHook();
+    }
+
+    //images 
+    const ImagesContainer  = document.createElement('div');
+    ImagesContainer.className = 'hotspot-toolbar-images';
+
+    //create image wrapper
+    const imageWrapper = document.createElement('div');
+    imageWrapper.className = 'hotspot-image-wrapper';
+
+    
+    const images = panoramas.map((panorama) => {
+        const image = document.createElement('img');
+        image.className = 'hover:scale-105 transition cursor-pointer';
+        image.key = panorama.id;
+        image.src = storageFormat(panorama.image_path);
+
+        //image
+        image.addEventListener('click',(e)=>{
+          e.stopPropagation();
+          if (panorama.sceneInstance) {
+            panorama.sceneInstance.switchTo();
+          }
+        });
+    
+        return image;
+    });
+
+    images.forEach(image => {
+      imageWrapper.appendChild(image);
+    });
+    
+    ImagesContainer.appendChild(imageWrapper);
+
+    controlsWrapper.appendChild(editBtn);
+    controlsWrapper.appendChild(delBtn);
+    controlsWrapper.appendChild(rotateLeftBtn);
+    controlsWrapper.appendChild(rotateRightBtn);
+    controlsWrapper.appendChild(nextSceneBtn);
+
+    visual.appendChild(linkNavigation);
+    visual.appendChild(controlsWrapper);
+    visual.appendChild(ImagesContainer);
+
+    interactionElement = linkNavigation; // We drag by the button
+
+  }
+
+  anchor.appendChild(visual);
+  hotspotObject = container.createHotspot(anchor, newHotspot);
+
+  const newHotspots = hotspotObject;
+
+  setHotspotHook(newHotspots.position());
+
+  // --- UNIVERSAL DRAGGING LOGIC ---
+  let isDragging = false;
+  let didMove = false;
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    didMove = true;
+    const rect = containerRef.current.getBoundingClientRect();
+    const newCoords = activeScene.view().screenToCoordinates({ 
+      x: e.clientX - rect.left, 
+      y: e.clientY - rect.top 
+    });
+
+    if (newCoords) hotspotObject.setPosition(newCoords);
   };
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
+  const onMouseUp = () => {
+    isDragging = false;
+    visual.classList.remove('dragging');
+    viewer.controls().enable();
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+    setTimeout(() => { didMove = false; }, 50);
     
-    // Create local URLs for each file
-    const newPanos = files.map(file => ({
-      file,
-      previewUrl: URL.createObjectURL(file), // This creates the local link
-      id: Math.random().toString(36).substr(2, 9)
-    }));
+    //get final position after moved
+    const finalPositionafterMoved = hotspotObject.position();
 
-    setPanoramas((prev) => [...prev, ...newPanos]);
+    setHotspotHook(finalPositionafterMoved);
+
+  };
+
+  interactionElement.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    isDragging = true;
+    visual.classList.add('dragging');
+    viewer.controls().disable();
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
 };
+
+const handleFileChange = async (e) => {
+  const files = Array.from(e.target.files);
+
+  if (files.length === 0) return;
+
+  try {
+
+    const response = await uploadPanoramas(files, 1);
+
+    setPanoramas((prev) => {
+      const existingIdsArray = prev.map(item => item.id);
+      const uniquenewImages = response.data.filter((image) => 
+        !existingIdsArray.includes(image.id)
+      );
+
+      return [...prev, ...uniquenewImages];
+    });
+
+  
+  } catch (error) {
+    console.error(error);
+  }
+
+};
+
+//function
+const setHotspotHook = (newHotspot) => {
+
+  setHotspots((prev) => {
+    const exists = prev.some(h => h.unique_id === newHotspot.unique_id);
+    
+    if (exists) {
+      // MERGE instead of REPLACE to keep metadata (titles, links, etc.)
+      return prev.map(h => 
+        h.unique_id === newHotspot.unique_id ? { ...h, ...newHotspot } : h
+      );
+    } 
+  
+    // INSERT brand new hotspot
+    return [...prev, newHotspot];
+  });
+};
+
+const removeHotspotHook = () => {
+  setHotspots((prev) => prev.filter((loopHotspot) => loopHotspot.unique_id !== clickedObjectIDRef.current.unique_id));
+}
+
+const handleSaveHotspot = async() => {
+
+  try {
+
+   if(hotspots.length <= 0 ) return;
+
+    const payload = {
+      hotspots : hotspots.map(function (hotspot) {
+            return {
+              project_id: 1,
+              panorama_id: 1,
+              image_Id : hotspot.image_id ?? null,
+              unique_id: hotspot.unique_id,
+              details: hotspot
+            }
+        })
+    }
+
+
+    //save
+    await saveHotspots(payload);
+    
+  } catch (error) {
+    console.error(error);
+    throw error;
+  } 
+
+}
+
+  const handleGetPanoramas = async () => {
+      try {
+
+        //create payload
+        const payload = {
+          user_id: 1
+        }
+
+        setIsPanoramaFetchingLoading(true);
+        const panoramaData = await getPanoramas(payload);
+        const PanoramaImagePath = panoramaData?.data;
+ 
+        if (PanoramaImagePath && PanoramaImagePath.length > 0) {
+          // 1. Flatten all images from all hotspots into one single array first
+          // We use .flatMap to handle the nested arrays
+          const allIncomingImages = PanoramaImagePath.map(h => h || []);
+
+          setPanoramas((prev) => {
+            // 2. Get existing IDs for comparison
+            const existingIds = new Set(prev.map(item => item.id));
+
+            // 3. Filter the incoming images to find only the new ones
+            const uniqueNewImages = allIncomingImages.filter(
+              (img) => !existingIds.has(img.id)
+            );
+
+            // 4. Return the merged array
+            return [...prev, ...uniqueNewImages];
+
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching the ProjectData', error);
+      } finally{
+        setIsPanoramaFetchingLoading(true);
+      }
+  };
+
+  const handleGetHotspots = async() => {
+
+    try {
+
+      const payload = {
+        project_id : 1
+      };
+
+      const hotspotsResponse = await getHotSpot(payload);
+
+      const response = hotspotsResponse?.data;
+
+      response.map((response)=> {
+
+        try {
+
+          if(response.details && response.details !== ""){
+        
+            const parseDetails = JSON.parse(response.details);
+            setHotspotHook(parseDetails);
+            if(count.current == 0){
+              console.log(parseDetails);
+              
+              addHotspot(parseDetails, parseDetails.type)
+            }
+          
+          }
+          
+        } catch (error) {
+            console.error(error);
+            throw error; 
+        }
+       
+      });  
+      
+      count.current++;
+      
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }    
+  }
+
+  const handleDisplayHotspotFromDB = () => {
+    try {
+      console.log(hotspots);
+      
+    //  hotspots.map((hotspot)=>{
+    //   console.log(hotspot);
+      
+    //     addHotspot(hotspot, hotspot.type);
+    //  })
+     
+      } catch (error) {
+        console.error(error);
+      }
+  }
+
+
+
+
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
@@ -214,6 +583,32 @@ const spawnHotspotAtCenter = () => {
       </div>
     </section>
 
+     <section>
+      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Add Link Hotspot</h3>
+      <div 
+        onClick={spawnLinkHotspotAtCenter}
+        className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
+      >
+          <button
+          // onClick={spawnHotspotAtCenter}
+          className="group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm"
+          style={{ outline: '2px solid white', outlineOffset: '-4px' }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={3.5}
+            stroke="currentColor"
+            className="w-5 h-5 text-gray-900 transition-transform duration-500"
+            // style={{ transform: `rotate(${rotation}deg)` }}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+          </svg>
+        </button>
+      </div>
+    </section>
+
     <hr className="border-zinc-800" />
 
     {/* SECTION: UPLOAD & GALLERY */}
@@ -221,40 +616,55 @@ const spawnHotspotAtCenter = () => {
       <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Panorama Library</h3>
       
       {/* Upload Button */}
-      <label className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-colors mb-4">
-        + UPLOAD PANOS
-        <input 
-          type="file" 
-          multiple 
-          accept="image/*"
-          className="hidden" 
-          onChange={handleFileChange}
-        />
-      </label>
+     <label className="relative flex items-center justify-center gap-2 w-full h-[35px] py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-all duration-300 mb-4 overflow-hidden">
+              {/* 1. THE SPINNER LAYER */}
+              <Loading isLoading={isLoading} />
+              <span>+ UPLOAD 360 VIEWS</span>
+              <input 
+                type="file" 
+                multiple 
+                disabled={isLoading} // Professional touch: disable while uploading
+                accept="image/*"
+                className="hidden" 
+                onChange={handleFileChange}
+              />
+            </label>
+         
 
-      {/* Preview Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        {panoramas.map((pano) => (
-          <div key={pano.id} className="relative group aspect-square rounded-md overflow-hidden bg-zinc-900 border border-zinc-700">
-            <img 
-              src={pano.previewUrl} 
-              alt="Preview" 
-              className="w-full h-full object-cover"
-            />
-            {/* Overlay on hover */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-               <button className="text-[10px] bg-red-600 px-2 py-1 rounded">Set Active</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {panoramas.length === 0 && (
-        <p className="text-[10px] text-gray-600 text-center italic mt-2">No images uploaded yet</p>
-      )}
+                {panoramas.length === 0 ? (
+                    <div className="relative items-center justify-center">
+                      <Loading isLoading={isPanoramaFetchingLoading} />                     
+                    </div>
+                    ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {panoramas.map((panorama) => {
 
+                        return (
+                            <div key={panorama.id} className="p-2 border border-zinc-700 rounded">
+                              <img 
+                                src={storageFormat(panorama.image_path)} 
+                                alt="Panorama View"
+                                className="w-full h-auto rounded"
+                                // Troubleshooting tip: log if the specific image fails to load
+                                onError={() => console.error(`Failed to load image at: ${fullImagePath}`)}
+                              />
+                              <p className="text-[10px] mt-1 text-center">ID: {panorama.id}</p>
+                            </div>
+                          );
+
+                        })}
+                    </div>
+              )}
     </section>
-    
+
+    <section>
+      <button 
+        onClick={handleSaveHotspot} 
+        className="bg-indigo-600 hover:bg-indigo-700 text-white "
+          >
+        Sync Changes
+      </button>
+    </section>
   </div>
       {/* VIEWER AREA */}
       <div 

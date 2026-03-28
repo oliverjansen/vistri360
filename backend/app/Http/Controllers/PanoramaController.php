@@ -2,38 +2,67 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\HotspotImage;
+use App\Models\Panorama;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class HotspotImageController extends Controller
+class PanoramaController extends Controller
 {
-    public function index (){
+
+    public function index(){
+
+        request()->validate([
+            'user_id' => 'sometimes'
+        ]);
+
         try {
 
-            $data = HotspotImage::where('project_id',1 )->get();
+            $userId = request('user_id');
+
+            $panoramas = Panorama::where('user_id',$userId)->get();
 
             return response()->json([
-                'message' => 'Successfully retreived the hotspot images',
-                'data' => $data
+                'message' => 'Panoramas retrieved successfully',
+                'data' => $panoramas,
             ]);
-
-        } catch (\Throwable $th) {
-            Log::error('Error retreiving hotspot image'. $th->getMessage());
+        } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error retreiving hotspot image'. $th->getMessage(),
-            ]);
+                'message' => 'Error retrieving project: ' . $e->getMessage(),
+            ], 500);
         }
+
+
     }
-    public function upload(Request $request) // Type-hinting Request is safer for files
-    {
+    public function show($id){
+
         try {
+
+            $project = Panorama::findOrFail($id);
+
+
+            return response()->json([
+                'message' => 'Project retrieved successfully',
+                'data' => $project,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error retrieving project: ' . $e->getMessage(),
+            ], 500);
+        }
+
+    }
+      public function upload(Request $request) // Type-hinting Request is safer for files
+    {
+
+        DB::beginTransaction();
+
+        try {
+
 
             $request->validate([
                 'panoramas'   => 'required|array',
-                'panoramas.*' => 'required|file|mimes:jpg,jpeg,png|max:10240',
-                'project_id'  => 'required|integer|exists:projects,id',
-                'hotspot_id'  => 'required|integer|exists:hotspots,id',
+                'panoramas.*' => 'required|file|mimes:jpg,jpeg,png|max:10240'
             ]);
 
             if(!public_path('storage')){
@@ -55,25 +84,23 @@ class HotspotImageController extends Controller
                 // store() would try to find a disk named after your filename!
                 $path = $pano->storeAs('panoramas', $fileName,'public');
 
-                log::info($path);
+                Log::info($path);
 
 
                 $imageData[] = [
-                    'hotspot_id' => $request->hotspot_id,
-                    'project_id' => $request->project_id,
+                    'user_id' => $request->user_id,
                     'image_path'  => $path,
-                    'created_at' => $now, // Required for Bulk Insert
-                    'updated_at' => $now,
                 ];
             }
 
-            // Use a Transaction: if one fails, none are saved
-            \DB::transaction(function () use ($imageData) {
-                HotspotImage::insert($imageData);
-            });
+
+            //save project
+            Panorama::insert($imageData);
 
             // Fetch the updated list for this specific hotspot
-            $data = HotspotImage::where('hotspot_id', $request->hotspot_id)->get();
+            $data = Panorama::where('user_id', $request->user_id)->get();
+
+            DB::commit();
 
             return response()->json([
                 'message' => 'Images uploaded and recorded successfully',
@@ -81,11 +108,11 @@ class HotspotImageController extends Controller
             ]);
 
         } catch (\Throwable $th) {
+            DB::rollBack();
             Log::error('Error uploading image: ' . $th->getMessage());
             return response()->json([
                 'message' => 'Server Error: ' . $th->getMessage(),
             ], 500);
         }
     }
-
 }
