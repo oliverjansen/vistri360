@@ -2,12 +2,13 @@ import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
 import type from "marzipano/src/util/type";
-import { fetchHotSpot , saveHotspots} from "../api/hotspotService";
+import { getHotSpot , saveHotspots} from "../api/hotspotService";
 import {fetchProject} from "../api/ProjectService";
 import { request } from "../api/apiConfig";
 import { useUploadPanoramas } from "../hooks/useUploadPanorama";
 import Loading from "./Loading";
 import { storageFormat } from "../utils/Formats"; 
+import { showPanorama, getPanoramas } from "../api/PanoramaService";
 
 
 const PanoramaViewer = ({ imageUrl }) => {
@@ -20,8 +21,9 @@ const PanoramaViewer = ({ imageUrl }) => {
   const [panoramas, setPanoramas] = useState([]);
   const [hotspots, setHotspots] = useState([]);
   const [rotation, setRotation] = useState(0);
-  const [isProjectFetchingLoading, setIsProjectFetchingLoading] = useState(false);
+  const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
   const clickedObjectIDRef = useRef(null);
+  const count = useRef(0);
 
 
  const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
@@ -30,7 +32,13 @@ const PanoramaViewer = ({ imageUrl }) => {
     if (!containerRef.current) return;
 
     //fetch data
-    handleFetchProjectData();
+    handleGetPanoramas();
+
+    //fetch hotspot details
+    handleGetHotspots();
+
+    //handled displaying hotspot from db
+    // handleDisplayHotspotFromDB();
     
     const viewerOpts = {
       controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
@@ -88,7 +96,7 @@ const spawnHotspotAtCenter = () => {
   };
 
   // This is the absolute center of where the camera is pointing
-  addHotspot(centerCoords,'hotspot');
+  addHotspot(centerCoords,'INFO');
   
 };
 
@@ -104,15 +112,17 @@ const spawnLinkHotspotAtCenter = () => {
   };
 
   // This is the absolute center of where the camera is pointing
-  addHotspot(centerCoords, 'link');
+  addHotspot(centerCoords, 'LINK');
 };
 
 
-const addHotspot = (coords, hotspotType = 'hotspot') => {
+const addHotspot = (coords, hotspotType = 'INFO') => {
 
   const activeScene = sceneRef.current;
   const viewer = viewerRef.current;
-  let newHotspot = { ...coords, unique_id: Date.now()};
+  const unique_id = coords.unique_id ?? Date.now();
+
+  let newHotspot = { ...coords, unique_id};
 
   if (!activeScene || !viewer) return;
 
@@ -129,7 +139,7 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
   let clickedObjectID = null;
 
   // --- TYPE: STANDARD HOTSPOT ---
-  if (hotspotType === 'hotspot') {
+  if (hotspotType === 'INFO') {
 
     newHotspot = { ...newHotspot, type: 'INFO' };
 
@@ -204,7 +214,7 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
 
     interactionElement = img; // We drag by the image
 
-  } else if (hotspotType === 'link') {// --- TYPE: LINK HOTSPOT ---
+  } else if (hotspotType === 'LINK') {// --- TYPE: LINK HOTSPOT ---
     
    newHotspot = { ...newHotspot, type: 'LINK' };
 
@@ -332,9 +342,9 @@ const addHotspot = (coords, hotspotType = 'hotspot') => {
   anchor.appendChild(visual);
   hotspotObject = container.createHotspot(anchor, newHotspot);
 
-  const newHotspotss = hotspotObject;
+  const newHotspots = hotspotObject;
 
-  setHotspotHook(newHotspotss.position());
+  setHotspotHook(newHotspots.position());
 
   // --- UNIVERSAL DRAGGING LOGIC ---
   let isDragging = false;
@@ -406,6 +416,7 @@ const handleFileChange = async (e) => {
 
 //function
 const setHotspotHook = (newHotspot) => {
+
   setHotspots((prev) => {
     const exists = prev.some(h => h.unique_id === newHotspot.unique_id);
     
@@ -435,6 +446,7 @@ const handleSaveHotspot = async() => {
       hotspots : hotspots.map(function (hotspot) {
             return {
               project_id: 1,
+              panorama_id: 1,
               image_Id : hotspot.image_id ?? null,
               unique_id: hotspot.unique_id,
               details: hotspot
@@ -442,26 +454,33 @@ const handleSaveHotspot = async() => {
         })
     }
 
+
     //save
     await saveHotspots(payload);
     
   } catch (error) {
-    console.log(error);
+    console.error(error);
     throw error;
   } 
 
 }
 
-  const handleFetchProjectData = async (id = 1) => {
+  const handleGetPanoramas = async () => {
       try {
-        setIsProjectFetchingLoading(true);
-        const projectData = await fetchProject(id);
-        const projectImages = projectData?.data?.project_images;
 
-        if (projectImages && projectImages.length > 0) {
+        //create payload
+        const payload = {
+          user_id: 1
+        }
+
+        setIsPanoramaFetchingLoading(true);
+        const panoramaData = await getPanoramas(payload);
+        const PanoramaImagePath = panoramaData?.data;
+ 
+        if (PanoramaImagePath && PanoramaImagePath.length > 0) {
           // 1. Flatten all images from all hotspots into one single array first
           // We use .flatMap to handle the nested arrays
-          const allIncomingImages = projectImages.map(h => h || []);
+          const allIncomingImages = PanoramaImagePath.map(h => h || []);
 
           setPanoramas((prev) => {
             // 2. Get existing IDs for comparison
@@ -480,9 +499,71 @@ const handleSaveHotspot = async() => {
       } catch (error) {
         console.error('Error fetching the ProjectData', error);
       } finally{
-        setIsProjectFetchingLoading(true);
+        setIsPanoramaFetchingLoading(true);
       }
   };
+
+  const handleGetHotspots = async() => {
+
+    try {
+
+      const payload = {
+        project_id : 1
+      };
+
+      const hotspotsResponse = await getHotSpot(payload);
+
+      const response = hotspotsResponse?.data;
+
+      response.map((response)=> {
+
+        try {
+
+          if(response.details && response.details !== ""){
+        
+            const parseDetails = JSON.parse(response.details);
+            setHotspotHook(parseDetails);
+            if(count.current == 0){
+              console.log(parseDetails);
+              
+              addHotspot(parseDetails, parseDetails.type)
+            }
+          
+          }
+          
+        } catch (error) {
+            console.error(error);
+            throw error; 
+        }
+       
+      });  
+      
+      count.current++;
+      
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }    
+  }
+
+  const handleDisplayHotspotFromDB = () => {
+    try {
+      console.log(hotspots);
+      
+    //  hotspots.map((hotspot)=>{
+    //   console.log(hotspot);
+      
+    //     addHotspot(hotspot, hotspot.type);
+    //  })
+     
+      } catch (error) {
+        console.error(error);
+      }
+  }
+
+
+
+
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
@@ -552,7 +633,7 @@ const handleSaveHotspot = async() => {
 
                 {panoramas.length === 0 ? (
                     <div className="relative items-center justify-center">
-                      <Loading isLoading={isProjectFetchingLoading} />                     
+                      <Loading isLoading={isPanoramaFetchingLoading} />                     
                     </div>
                     ) : (
                     <div className="grid grid-cols-3 gap-2">

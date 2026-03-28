@@ -5,11 +5,13 @@ export const request = async (endpoint, options = {}) => {
     
     //stop request if signal is aborted and get the custom config
     const {signal, ...customConfig} = options;
+    const isFormdata = customConfig.body instanceof FormData;
 
     const config = {
         method: 'GET',
         headers:{
             'Accept': 'application/json',
+            ...(!isFormdata && { 'Content-Type': 'application/json' }),
             ...(customConfig.headers || {}),
         },
         signal,

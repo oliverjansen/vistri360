@@ -16,4 +16,8 @@ class Hotspot extends Model
     public function image(){
         return $this->belongsTo(ProjectImage::class);
     }
+
+    public function panorama(){
+        return $this->belongsTo(ProjectImage::class);
+    }
 }
