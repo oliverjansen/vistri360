@@ -2,7 +2,7 @@ import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
 import type from "marzipano/src/util/type";
-import { getHotSpot , saveHotspots} from "../api/hotspotService";
+import { getHotSpot , saveHotspots , deleteHotspot} from "../api/hotspotService";
 import {fetchProject} from "../api/ProjectService";
 import { request } from "../api/apiConfig";
 import { useUploadPanoramas } from "../hooks/useUploadPanorama";
@@ -24,6 +24,7 @@ const PanoramaViewer = ({ imageUrl }) => {
   const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
   const clickedObjectIDRef = useRef(null);
   const count = useRef(0);
+  const panoramaRef = useRef(0)
 
 
  const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
@@ -440,24 +441,32 @@ const handleSaveHotspot = async() => {
 
   try {
 
-   if(hotspots.length <= 0 ) return;
+   if(hotspots.length <= 0 ) {
 
     const payload = {
-      hotspots : hotspots.map(function (hotspot) {
-            return {
-              project_id: 1,
-              panorama_id: 1,
-              image_Id : hotspot.image_id ?? null,
-              unique_id: hotspot.unique_id,
-              details: hotspot
-            }
-        })
+      hotspotId : null,
+      panoramaId : panoramaRef
     }
 
+    await deleteHotspot(payload);
 
-    //save
-    await saveHotspots(payload);
-    
+   }else {
+      const payload = {
+        hotspots : hotspots.map(function (hotspot) {
+              return {
+                project_id: 1,
+                panorama_id: 1,
+                image_Id : hotspot.image_id ?? null,
+                unique_id: hotspot.unique_id,
+                details: hotspot
+              }
+          })
+      }
+
+      //save
+      await saveHotspots(payload);
+   }
+
   } catch (error) {
     console.error(error);
     throw error;
@@ -524,8 +533,7 @@ const handleSaveHotspot = async() => {
             const parseDetails = JSON.parse(response.details);
             setHotspotHook(parseDetails);
             if(count.current == 0){
-              console.log(parseDetails);
-              
+              panoramaRef.current = response.panorama_id;
               addHotspot(parseDetails, parseDetails.type)
             }
           
@@ -545,25 +553,6 @@ const handleSaveHotspot = async() => {
       throw error;
     }    
   }
-
-  const handleDisplayHotspotFromDB = () => {
-    try {
-      console.log(hotspots);
-      
-    //  hotspots.map((hotspot)=>{
-    //   console.log(hotspot);
-      
-    //     addHotspot(hotspot, hotspot.type);
-    //  })
-     
-      } catch (error) {
-        console.error(error);
-      }
-  }
-
-
-
-
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>

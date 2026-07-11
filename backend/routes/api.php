@@ -19,6 +19,7 @@ Route::prefix('projects')->group(function () {
 Route::controller(HotspotController::class)->prefix('hotspots')->group(function () {
         Route::get('/', 'index');
         Route::put('/updateHotspost', 'updateHotspost');
+        Route::delete('/deleteHotspot', 'delete');
         Route::controller(HotspotImageController::class)->prefix('images')->group(function () {
             Route::get('/', 'index');
         });

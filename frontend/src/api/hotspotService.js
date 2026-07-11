@@ -27,5 +27,16 @@ export const saveHotspots = async(payload) => {
     }
 }
 
+export const deleteHotspot = async(payload) => {
+    try {
+        const data = await request(`projects/hotspots/deleteHotspot`, {
+            method: 'DELETE',
+            body:JSON.stringify(payload)
+        });
+        return data;
+    } catch (error) {
+        
+    }
+}
 
 
