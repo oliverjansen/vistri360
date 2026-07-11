@@ -86,14 +86,17 @@ class HotspotController extends Controller
         // Add timestamps to each item before sending to the DB
         $uniqueHotspotId = [];
         $now = now();
-        $data = collect($validated['hotspots'])->map(function ($item) use ($now, &$uniqueHotspotId) {
+        $panorama_id = null;
+
+        $data = collect($validated['hotspots'])->map(function ($item) use ($now, &$uniqueHotspotId,&$panorama_id) {
 
             $uniqueHotspotId[] = $item['unique_id'];
+            $panorama_id = $item['panorama_id'];
 
             return [
                 'project_id' => $item['project_id'],
                 'unique_id'  => $item['unique_id'],
-                'panorama_id' => $item['project_id'],
+                'panorama_id' => $item['panorama_id'],
                 'details'    => json_encode($item['details']), // <--- THE FIX
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -101,8 +104,12 @@ class HotspotController extends Controller
 
         })->toArray();
 
-            if(!empty($uniqueHotspotId)){
-               Hotspot::whereIn('unique_id',$uniqueHotspotId)->delete();
+            if($panorama_id){
+                Hotspot::where('panorama_id', $panorama_id)
+                ->when(!empty($uniqueHotspotId), function($query) use ($uniqueHotspotId){
+                    $query->whereNotIn('unique_id', $uniqueHotspotId);
+                })
+                ->delete();
             }
 
             // THE UPSERT COMMAND
@@ -131,8 +138,30 @@ class HotspotController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy()
+    public function delete()
     {
+        try {
 
+            request()->validate([
+                'panoramaId' => 'required_without:hotspotId',
+                'hotspotId'  => 'required_without:panoramaId',
+            ]);
+
+            $panoramaId =  request('panoramaId');
+            $hotspotId = request('hotspotId');
+
+            Hotspot::when($hotspotId, function($query) use ($panoramaId){
+                $query->where('panorama_id', $panoramaId);
+            })->when($panoramaId, function($query) use ($panoramaId){
+                $query->where('panorama_id', $panoramaId);
+            })->delete();
+
+            return response()->json([
+                'message' => "Successfully deleted the hotspot"
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('Failed to delete Hotspot: ' . $th->getMessage());
+            return response()->json(['message' => 'Error syncing data'], 500);
+        }
     }
 }

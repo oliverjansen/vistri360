@@ -2,7 +2,7 @@ import Marzipano from "marzipano";
 import redIcon from "../images/red.jpg";
 import React, { useEffect, useRef, useState } from "react";
 import type from "marzipano/src/util/type";
-import { getHotSpot , saveHotspots} from "../api/hotspotService";
+import { getHotSpot , saveHotspots , deleteHotspot} from "../api/hotspotService";
 import {fetchProject} from "../api/ProjectService";
 import { request } from "../api/apiConfig";
 import { useUploadPanoramas } from "../hooks/useUploadPanorama";
@@ -24,32 +24,23 @@ const PanoramaViewer = ({ imageUrl }) => {
   const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
   const clickedObjectIDRef = useRef(null);
   const count = useRef(0);
+  const panoramaRef = useRef(0)
+  const openHotspotPanoramaControls = useRef(null); // Store controls for each hotspot by unique_id
+  const panoramasRef = useRef([]); // Store panoramas in a ref for access in event handlers without stale closures
+  const linkHotspotRegistry = useRef({});
 
 
  const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
-  
-  useEffect(() => {
-    if (!containerRef.current) return;
 
-    //fetch data
-    handleGetPanoramas();
+  const createMarzipanoScene = (sceneId, imageSource) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return null;
 
-    //fetch hotspot details
-    handleGetHotspots();
+    if (sceneMapRef.current[sceneId]) {
+      return sceneMapRef.current[sceneId];
+    }
 
-    //handled displaying hotspot from db
-    // handleDisplayHotspotFromDB();
-    
-    const viewerOpts = {
-      controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
-      stageType: "webgl",
-    };
-
-    const viewer = new Marzipano.Viewer(containerRef.current, viewerOpts);
-    viewerRef.current = viewer;
-
-    const source = Marzipano.ImageUrlSource.fromString(imageUrl);
-
+    const source = Marzipano.ImageUrlSource.fromString(imageSource);
     const levels = [
       { tileSize: 256, size: 256, fallbackOnly: true },
       { tileSize: 512, size: 512 },
@@ -62,8 +53,40 @@ const PanoramaViewer = ({ imageUrl }) => {
     const initialView = { yaw: 90 * Math.PI / 180, pitch: -30 * Math.PI / 180, fov: 90 * Math.PI / 180 };
     const limiter = Marzipano.RectilinearView.limit.traditional(2048, (120 * Math.PI) / 180);
     const view = new Marzipano.RectilinearView(initialView, limiter);
-
     const sceneInstance = viewer.createScene({ source, geometry, view, pinFirstLevel: true });
+
+    sceneMapRef.current[sceneId] = sceneInstance;
+    return sceneInstance;
+  };
+  
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const initializeData = async () => {
+    try {
+      // 1. Wait for Panoramas to finish and update state
+      await handleGetPanoramas();
+      
+    } catch (error) {
+      console.error("Initialization error:", error);
+    }finally{
+         // 2. Wait for Hotspots to finish
+      await handleGetHotspots();
+    }
+  };
+
+  initializeData();
+    
+    const viewerOpts = {
+      controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
+      stageType: "webgl",
+    };
+
+    const viewer = new Marzipano.Viewer(containerRef.current, viewerOpts);
+    viewerRef.current = viewer;
+
+    sceneMapRef.current = {};
+    const sceneInstance = createMarzipanoScene("main-scene", imageUrl);
     sceneInstance.switchTo({ transitionDuration: 400 });
     sceneRef.current = sceneInstance;
 
@@ -71,6 +94,13 @@ const PanoramaViewer = ({ imageUrl }) => {
       if (openControlsRef.current) {
         openControlsRef.current.style.display = 'none';
         openControlsRef.current = null;
+      }
+
+      if(openHotspotPanoramaControls.current){
+        openHotspotPanoramaControls.current.style.display = 'none';
+        const openImageWrapper = openHotspotPanoramaControls.current.querySelector('.hotspot-image-wrapper');
+        if (openImageWrapper) openImageWrapper.style.display = 'none';
+        openHotspotPanoramaControls.current = null;
       }
     };
 
@@ -118,6 +148,7 @@ const spawnLinkHotspotAtCenter = () => {
 
 const addHotspot = (coords, hotspotType = 'INFO') => {
 
+  
   const activeScene = sceneRef.current;
   const viewer = viewerRef.current;
   const unique_id = coords.unique_id ?? Date.now();
@@ -217,6 +248,7 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
   } else if (hotspotType === 'LINK') {// --- TYPE: LINK HOTSPOT ---
     
    newHotspot = { ...newHotspot, type: 'LINK' };
+    let currentRotation = newHotspot.rotation  ?? 0; // Default rotation is 0 if not set
 
     const controlsWrapper  = document.createElement('div');
     controlsWrapper.className = 'hotspot-toolbar';
@@ -226,31 +258,13 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
     linkNavigation.style.outline = '2px solid white';
     linkNavigation.style.outlineOffset = '-4px';
-    
+    linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+
     linkNavigation.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="black" class="w-5 h-5 transition-transform duration-500">
         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
       </svg>
     `;
-
-    let currentRotation = 0;
-
-    linkNavigation.addEventListener('click', (e) => {
-      e.stopPropagation();
-
-      if (openControlsRef.current && openControlsRef.current !== controlsWrapper) {
-          openControlsRef.current.style.display = 'none';
-      }
-      
-      if(!didMove){
-        const isHidden = controlsWrapper.style.display === 'none';
-        controlsWrapper.style.display = isHidden ? 'flex' : 'none';
-        openControlsRef.current = isHidden ? controlsWrapper : null;
-      }
-
-      //ref for current selected object
-      clickedObjectIDRef.current = hotspotObject.position();
-    });
 
     const editBtn = document.createElement('button');
     editBtn.className = 'hotspot-btn edit-btn';
@@ -268,21 +282,53 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     rotateRightBtn.className = 'hotspot-btn rotate-btn';
     rotateRightBtn.innerHTML = '⤿';
 
+    let selectedNextScenePath = newHotspot.next_scene_path ?? null;
+
     //next scene
     const nextSceneBtn = document.createElement('button');
     nextSceneBtn.className = 'hotspot-btn next-scene-btn';
-    nextSceneBtn.innerHTML = '➜]';
+    nextSceneBtn.title = 'Go to selected scene';
+    nextSceneBtn.disabled = !selectedNextScenePath;
+    nextSceneBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+      </svg>
+    `;
+
+    nextSceneBtn.onclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      if (!selectedNextScenePath) {
+        console.warn('Select an image before going to the next scene.');
+        return;
+      }
+
+      const nextScene = createMarzipanoScene(`linked-scene-${unique_id}-${selectedNextScenePath}`, selectedNextScenePath);
+      if (!nextScene) return;
+
+      nextScene.switchTo({ transitionDuration: 700 });
+      sceneRef.current = nextScene;
+
+      controlsWrapper.style.display = 'none';
+      ImagesContainer.style.display = 'none';
+      imageWrapper.style.display = 'none';
+      openControlsRef.current = null;
+      openHotspotPanoramaControls.current = null;
+    };
 
     rotateLeftBtn.onclick = (e) => {
       e.stopPropagation();
-      currentRotation = (currentRotation - 60);
+      currentRotation = (currentRotation - 30);
       linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+      handleLinkHotspotRotation(clickedObjectIDRef.current.unique_id, currentRotation);
     };
 
     rotateRightBtn.onclick = (e) => {
       e.stopPropagation();
-      currentRotation = (currentRotation + 60);
+      currentRotation = (currentRotation + 30);
       linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
+      handleLinkHotspotRotation(clickedObjectIDRef.current.unique_id, currentRotation);
     }
 
     delBtn.onclick = (e) => {
@@ -292,39 +338,99 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
 
       removeHotspotHook();
     }
-
+  
     //images 
     const ImagesContainer  = document.createElement('div');
     ImagesContainer.className = 'hotspot-toolbar-images';
+    ImagesContainer.style.display = 'none';
 
-    //create image wrapper
-    const imageWrapper = document.createElement('div');
-    imageWrapper.className = 'hotspot-image-wrapper';
+      //create image wrapper
+      const imageWrapper = document.createElement('div');
+      imageWrapper.className = 'hotspot-image-wrapper';
+      imageWrapper.style.display = 'none'; // Start hidden until the user clicks the link hotspot
 
-    
-    const images = panoramas.map((panorama) => {
-        const image = document.createElement('img');
-        image.className = 'hover:scale-105 transition cursor-pointer';
-        image.key = panorama.id;
-        image.src = storageFormat(panorama.image_path);
+      linkHotspotRegistry.current[unique_id] = imageWrapper;
 
-        //image
-        image.addEventListener('click',(e)=>{
-          e.stopPropagation();
-          if (panorama.sceneInstance) {
-            panorama.sceneInstance.switchTo();
+     const allPanoramas = panoramas.length > 0 ? panoramas : panoramasRef.current; // Use the ref as the source of truth for panoramas
+ 
+      const images = allPanoramas.map((panorama) => {
+          const image = document.createElement('img');
+          const imagePath = storageFormat(panorama.image_path);
+
+          image.className = 'hover:scale-105 transition cursor-pointer';
+          image.key = panorama.id;
+          image.src = imagePath;
+          image.dataset.imagePath = imagePath;
+
+          if (imagePath === selectedNextScenePath) {
+            image.classList.add('selected-panorama-image');
           }
+      
+          return image;
+      });
+
+      images.forEach(image => {        
+        imageWrapper.appendChild(image);
+      });
+      
+      ImagesContainer.appendChild(imageWrapper);
+
+      ImagesContainer.addEventListener('click', (e) => {
+        const clickedImage = e.target.closest('img');
+        if (!clickedImage || !ImagesContainer.contains(clickedImage)) return;
+
+        e.stopPropagation();
+        selectedNextScenePath = clickedImage.dataset.imagePath || clickedImage.src;
+        nextSceneBtn.disabled = false;
+        nextSceneBtn.dataset.selectedImagePath = selectedNextScenePath;
+
+        imageWrapper.querySelectorAll('img').forEach((image) => {
+          image.classList.toggle('selected-panorama-image', image === clickedImage);
         });
+
+        setHotspots((prev) => {
+          return prev.map((hotspot) => {
+            if (hotspot.unique_id === unique_id) {
+              return { ...hotspot, next_scene_path: selectedNextScenePath };
+            }
+
+            return hotspot;
+          });
+        });
+
+        console.log('Selected panorama image path:', selectedNextScenePath);
+      });
+
     
-        return image;
+    linkNavigation.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      if (openControlsRef.current && openControlsRef.current !== controlsWrapper) {
+          openControlsRef.current.style.display = 'none';
+      }
+
+      if(openHotspotPanoramaControls.current && openHotspotPanoramaControls.current !== ImagesContainer){
+        openHotspotPanoramaControls.current.style.display = 'none';
+        const openImageWrapper = openHotspotPanoramaControls.current.querySelector('.hotspot-image-wrapper');
+        if (openImageWrapper) openImageWrapper.style.display = 'none';
+      }
+      
+      if(!didMove){
+        const isHidden = controlsWrapper.style.display === 'none';
+        controlsWrapper.style.display = isHidden ? 'flex' : 'none';
+        openControlsRef.current = isHidden ? controlsWrapper : null;
+
+        const isPanoramaHidden = ImagesContainer.style.display === 'none';
+        imageWrapper.style.display = isPanoramaHidden ? 'block' : 'none'; // Track this specific hotspot's controls
+        ImagesContainer.style.display = isPanoramaHidden ? 'block' : 'none';
+        openHotspotPanoramaControls.current = isPanoramaHidden ? ImagesContainer : null; // Store reference to this hotspot's panorama controls
+      }
+
+      //ref for current selected object
+      clickedObjectIDRef.current = hotspotObject.position();
     });
 
-    images.forEach(image => {
-      imageWrapper.appendChild(image);
-    });
     
-    ImagesContainer.appendChild(imageWrapper);
-
     controlsWrapper.appendChild(editBtn);
     controlsWrapper.appendChild(delBtn);
     controlsWrapper.appendChild(rotateLeftBtn);
@@ -436,28 +542,50 @@ const removeHotspotHook = () => {
   setHotspots((prev) => prev.filter((loopHotspot) => loopHotspot.unique_id !== clickedObjectIDRef.current.unique_id));
 }
 
+const handleLinkHotspotRotation = (unique_id, newRotation) => {
+  setHotspots((prev) => {
+      return prev.map((hotspot) => {
+          if(hotspot.unique_id === unique_id){
+            return {...hotspot, rotation: newRotation}
+          }else {
+            return hotspot;
+          }
+    })
+  })
+}
+
 const handleSaveHotspot = async() => {
 
-  try {
+  try { 
 
-   if(hotspots.length <= 0 ) return;
+  //if not delete hotspot, then delete records in the database
+   if(hotspots.length <= 0 ) {
 
     const payload = {
-      hotspots : hotspots.map(function (hotspot) {
-            return {
-              project_id: 1,
-              panorama_id: 1,
-              image_Id : hotspot.image_id ?? null,
-              unique_id: hotspot.unique_id,
-              details: hotspot
-            }
-        })
+      hotspotId : null,
+      panoramaId : panoramaRef
     }
 
+    await deleteHotspot(payload);
 
-    //save
-    await saveHotspots(payload);
-    
+   }else {
+      const payload = {
+        hotspots : hotspots.map(function (hotspot) {
+              return {
+                project_id: 1,
+                panorama_id: 1,
+                image_Id : hotspot.image_id ?? null,
+                unique_id: hotspot.unique_id,
+                details: hotspot,
+                rotation: hotspot.rotation ?? 0
+              }
+          })
+      }
+
+      //save
+      await saveHotspots(payload);
+   }
+
   } catch (error) {
     console.error(error);
     throw error;
@@ -465,43 +593,94 @@ const handleSaveHotspot = async() => {
 
 }
 
-  const handleGetPanoramas = async () => {
-      try {
+  // const handleGetPanoramas = async () => {
+  //     try {
 
-        //create payload
-        const payload = {
-          user_id: 1
-        }
+  //       //create payload
+  //       const payload = {
+  //         user_id: 1
+  //       }
 
-        setIsPanoramaFetchingLoading(true);
-        const panoramaData = await getPanoramas(payload);
-        const PanoramaImagePath = panoramaData?.data;
+  //       setIsPanoramaFetchingLoading(true);
+  //       const panoramaData = await getPanoramas(payload);
+  //       const PanoramaImagePath = panoramaData?.data;
+  //       if (PanoramaImagePath && PanoramaImagePath.length > 0) {
+  //         // 1. Flatten all images from all hotspots into one single array first
+  //         // We use .flatMap to handle the nested arrays
+  //         const allIncomingImages = PanoramaImagePath.map(h => h || []);
+
+  //         setPanoramas((prev) => {
+  //           // 2. Get existing IDs for comparison
+  //           const existingIds = new Set(prev.map(item => item.id));
+
+  //           // 3. Filter the incoming images to find only the new ones
+  //           const uniqueNewImages = allIncomingImages.filter(
+  //             (img) => !existingIds.has(img.id)
+  //           );
+
+  //           // 4. Return the merged array
+  //           return [...prev, ...uniqueNewImages];
+
+  //         });
+
+          
+  //       panoramasRef.current = ; // Store in ref for access in event handlers 
+  //       // without stale closures
  
-        if (PanoramaImagePath && PanoramaImagePath.length > 0) {
-          // 1. Flatten all images from all hotspots into one single array first
-          // We use .flatMap to handle the nested arrays
-          const allIncomingImages = PanoramaImagePath.map(h => h || []);
+  //       }
 
-          setPanoramas((prev) => {
-            // 2. Get existing IDs for comparison
-            const existingIds = new Set(prev.map(item => item.id));
+  //     } catch (error) {
+  //       console.error('Error fetching the ProjectData', error);
+  //     } finally{
+  //       setIsPanoramaFetchingLoading(true);
+  //     }
+  // };
 
-            // 3. Filter the incoming images to find only the new ones
-            const uniqueNewImages = allIncomingImages.filter(
-              (img) => !existingIds.has(img.id)
-            );
+  const handleGetPanoramas = async () => {
+  try {
+    const payload = { user_id: 1 };
+    setIsPanoramaFetchingLoading(true);
 
-            // 4. Return the merged array
-            return [...prev, ...uniqueNewImages];
+    const panoramaData = await getPanoramas(payload);
+    const panoramaImagePath = panoramaData?.data;
 
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching the ProjectData', error);
-      } finally{
-        setIsPanoramaFetchingLoading(true);
-      }
-  };
+    if (panoramaImagePath && panoramaImagePath.length > 0) {
+      // 1. Ensure we have a clean array of images
+      const allIncomingImages = panoramaImagePath.map(h => h || []);
+
+      // 2. Use the REF as the source of truth for comparison 
+      // (State might be stale, but the Ref is always current)
+      const existingIds = new Set(panoramasRef.current.map(item => item.id));
+
+      // 3. Filter for truly new images
+      const uniqueNewImages = allIncomingImages.filter(
+        (img) => !existingIds.has(img.id)
+      );
+
+      // 4. Create the final merged array
+      const updatedFullList = [...panoramasRef.current, ...uniqueNewImages];
+
+      // 5. UPDATE THE REF IMMEDIATELY
+      // This is synchronous. Any code calling panoramasRef.current after this line
+      // will see the updated data instantly.
+      panoramasRef.current = updatedFullList;
+
+      // 6. UPDATE THE STATE
+      // This schedules a re-render for your Sidebar/Gallery UI.
+      setPanoramas(updatedFullList);
+      
+      return updatedFullList; // Useful for the 'await' chain in initializeData
+    }
+    
+    return panoramasRef.current;
+  } catch (error) {
+    console.error('Error fetching the ProjectData', error);
+    return [];
+  } finally {
+    // FIX: Set to false so the loading spinner actually hides
+    setIsPanoramaFetchingLoading(false); 
+  }
+};
 
   const handleGetHotspots = async() => {
 
@@ -524,8 +703,7 @@ const handleSaveHotspot = async() => {
             const parseDetails = JSON.parse(response.details);
             setHotspotHook(parseDetails);
             if(count.current == 0){
-              console.log(parseDetails);
-              
+              panoramaRef.current = response.panorama_id;
               addHotspot(parseDetails, parseDetails.type)
             }
           
@@ -545,25 +723,6 @@ const handleSaveHotspot = async() => {
       throw error;
     }    
   }
-
-  const handleDisplayHotspotFromDB = () => {
-    try {
-      console.log(hotspots);
-      
-    //  hotspots.map((hotspot)=>{
-    //   console.log(hotspot);
-      
-    //     addHotspot(hotspot, hotspot.type);
-    //  })
-     
-      } catch (error) {
-        console.error(error);
-      }
-  }
-
-
-
-
 
   return (
     <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
