@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import PanoramaViewer from "../../components/PanoramaViewer";
+import PanoramaViewer from "../../components/PanoramaComponents/PanoramaViewer";
 import { fetchProject } from "../../api/ProjectService";
 
 const SceneSkeleton = () => (

@@ -1,14 +1,14 @@
 import Marzipano from "marzipano";
-import panoramaMarker from "../images/panorama-marker.png";
+import panoramaMarker from "../../images/panorama-marker.png";
 import React, { useEffect, useRef, useState } from "react";
-import { saveHotspots } from "../api/hotspotService";
-import { useUploadPanoramas } from "../hooks/useUploadPanorama";
-import { storageFormat } from "../utils/Formats"; 
-import { getPanoramas } from "../api/PanoramaService";
-import { buildHotspotPayload, mergePanoramaRecords, mergeSceneHotspots, removeHotspotById, removeHotspotsForDestinations, validateHotspots } from "../utils/hotspotValidation";
-import PanoramaAssetLibrary from "./PanoramaComponents/PanoramaAssetLibrary";
-import PanoramaSceneStrip from "./PanoramaComponents/PanoramaSceneStrip";
-import { createShareLink } from "../api/shareService";
+import { saveHotspots } from "../../api/hotspotService";
+import { useUploadPanoramas } from "../../hooks/useUploadPanorama";
+import { storageFormat } from "../../utils/Formats"; 
+import { getPanoramas } from "../../api/PanoramaService";
+import { buildHotspotPayload, mergePanoramaRecords, mergeSceneHotspots, removeHotspotById, removeHotspotsForDestinations, validateHotspots } from "../../utils/hotspotValidation";
+import PanoramaAssetLibrary from "./PanoramaAssetLibrary";
+import PanoramaSceneStrip from "./PanoramaSceneStrip";
+import { createShareLink } from "../../api/shareService";
 
 const PanelHeading = ({ children, count }) => (
   <div className="mb-3 flex items-center justify-between">

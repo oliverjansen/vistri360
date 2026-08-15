@@ -13,8 +13,8 @@ import SignInPage from './pages/AuthPages/SignInPage'
 // Dashboard Structure
 import DashLayout from './layouts/DashLayout'
 import DashboardPage from './pages/DashboardPages/DashboardPage'
-import ClientProjectsPage from './pages/DashboardPages/ClientProjectsPage'
-import ProjectScenePage from './pages/DashboardPages/ProjectScenePage'
+import ClientProjectsPage from './pages/PanoramaPages/ClientProjectsPage'
+import ProjectScenePage from './pages/PanoramaPages/ProjectScenePage'
 
 // NotFound 404
 import NotFoundPage from './pages/NotFoundPage';
