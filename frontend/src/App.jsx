@@ -13,6 +13,8 @@ import SignInPage from './pages/AuthPages/SignInPage'
 // Dashboard Structure
 import DashLayout from './layouts/DashLayout'
 import DashboardPage from './pages/DashboardPages/DashboardPage'
+import ClientProjectsPage from './pages/DashboardPages/ClientProjectsPage'
+import ProjectScenePage from './pages/DashboardPages/ProjectScenePage'
 
 // NotFound 404
 import NotFoundPage from './pages/NotFoundPage';
@@ -48,6 +50,14 @@ const routes = [
       {
         path: '',
         element: <DashboardPage />,
+      },
+      {
+        path: 'clients/:clientId',
+        element: <ClientProjectsPage />,
+      },
+      {
+        path: 'clients/:clientId/projects/:projectId',
+        element: <ProjectScenePage />,
       },
     ],
   },

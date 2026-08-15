@@ -1,42 +1,23 @@
-import {request} from "./apiConfig";
+import { request } from "./apiConfig";
 
 export const getHotSpot = async (payload) => {
     try {
         const payloadBuilder = new URLSearchParams(payload).toString();
-        const data = await request(`projects/hotspots/?${payloadBuilder}`); // GET hotspots
-        return data;
+        return await request("projects/hotspots/?" + payloadBuilder);
     } catch (error) {
-        console.error('Error Fetching Hotspot', error);
+        console.error("Error fetching hotspots", error);
         throw error;
     }
-}
+};
 
-
-export const saveHotspots = async(payload) => {
+export const saveHotspots = async (payload) => {
     try {
-        const data = await request('projects/hotspots/updateHotspost',{
-            method: 'PUT',
-            body:JSON.stringify(payload)
+        return await request("projects/hotspots/updateHotspost", {
+            method: "PUT",
+            body: JSON.stringify(payload),
         });
-
-        return data;
-        
     } catch (error) {
-        console.log('Error saving Coordinates', error);
+        console.error("Error saving hotspot coordinates", error);
         throw error;
     }
-}
-
-export const deleteHotspot = async(payload) => {
-    try {
-        const data = await request(`projects/hotspots/deleteHotspot`, {
-            method: 'DELETE',
-            body:JSON.stringify(payload)
-        });
-        return data;
-    } catch (error) {
-        
-    }
-}
-
-
+};

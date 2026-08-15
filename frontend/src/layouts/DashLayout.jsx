@@ -13,7 +13,7 @@ const DashLayout = () => {
 
   return (
     <>
-      <main className="font-jakarta">
+      <main className="min-h-screen w-full font-jakarta">
         <Outlet />
       </main>
     </>

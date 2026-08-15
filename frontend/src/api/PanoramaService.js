@@ -27,7 +27,7 @@ export const showPanorama = async (user_id) => {
     }
 }
 
-export const AddPanoramas = async (files, user_id) => {
+export const AddPanoramas = async (files, project_id) => {
 
     const formData = new FormData();
 
@@ -35,8 +35,8 @@ export const AddPanoramas = async (files, user_id) => {
         formData.append('panoramas[]', file);
     });
     
-    // Append project id and panorama id
-    formData.append('user_id', 1); 
+    // Append the owning project ID from the active scene route.
+    formData.append('project_id', project_id);
     
     return await request('panorama/upload',{
         method: 'POST',

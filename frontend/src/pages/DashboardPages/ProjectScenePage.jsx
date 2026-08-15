@@ -1,0 +1,33 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import PanoramaViewer from "../../components/PanoramaViewer";
+import { fetchProject } from "../../api/ProjectService";
+import samplePanorama from "../../images/sample.jpg";
+
+const SceneSkeleton = () => (
+  <div className="min-h-screen animate-pulse bg-linear-to-br from-navy via-secondary/40 to-navy p-6 sm:p-10" aria-label="Loading scene">
+    <div className="h-10 w-36 rounded-xl bg-white/15" />
+    <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center"><div className="h-[55vh] w-full max-w-6xl rounded-3xl border border-white/10 bg-white/5 shadow-2xl"><div className="flex h-full items-end p-8"><div className="h-8 w-64 rounded bg-white/10" /></div></div></div>
+  </div>
+);
+
+const ProjectScenePage = () => {
+  const { projectId } = useParams();
+  const [project, setProject] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetchProject(projectId).then((response) => active && setProject(response.data)).catch((error) => console.error("Unable to load project", error)).finally(() => active && setIsLoading(false));
+    return () => { active = false; };
+  }, [projectId]);
+
+  return (
+    <main className="relative min-h-screen bg-navy">
+      {!isLoading && <Link to={"/dashboard/clients/" + (project?.client_id ?? "")} className="absolute left-4 top-4 z-[100001] inline-flex items-center gap-2 rounded-xl border border-white/20 bg-navy/80 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-white backdrop-blur-md transition hover:bg-primary sm:left-6 sm:top-6"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>Back to projects</Link>}
+      {isLoading ? <SceneSkeleton /> : <PanoramaViewer imageUrl={samplePanorama} projectId={Number(projectId)} clientName={project?.name} />}
+    </main>
+  );
+};
+
+export default ProjectScenePage;

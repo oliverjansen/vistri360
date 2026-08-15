@@ -1,4 +1,5 @@
 import { request } from "./apiConfig";
+import { CACHE_KEYS, getCacheUpdatedAt, getCached, invalidateCache } from "./dashboardCache";
 
 export const fetchProject = async (projectId) => {
     try {
@@ -10,6 +11,28 @@ export const fetchProject = async (projectId) => {
     }
 }
 
+export const fetchProjects = async (clientId) => {
+    const data = await request(`projects?client_id=${encodeURIComponent(clientId)}`);
+    return data;
+};
+
+export const fetchProjectsCached = (clientId, forceRefresh = false) => getCached(
+    CACHE_KEYS.projects(clientId),
+    () => fetchProjects(clientId),
+    forceRefresh,
+);
+
+export const getProjectsCacheUpdatedAt = (clientId) => getCacheUpdatedAt(CACHE_KEYS.projects(clientId));
+
+export const invalidateProjectsCache = (clientId) => invalidateCache(CACHE_KEYS.projects(clientId));
+
+export const createProject = async (payload) => {
+    return request('projects', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+};
+
 
 export const AddPanoramas = async (files, projectId) => {
 
@@ -20,7 +43,7 @@ export const AddPanoramas = async (files, projectId) => {
     });
     
     // Append project id and panorama id
-    formData.append('project_id', 1); 
+    formData.append('project_id', projectId);
     
     return await request('projects/images/upload',{
         method: 'POST',

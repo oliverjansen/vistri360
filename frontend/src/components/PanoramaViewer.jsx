@@ -1,36 +1,96 @@
 import Marzipano from "marzipano";
-import redIcon from "../images/red.jpg";
+import panoramaMarker from "../images/panorama-marker.png";
 import React, { useEffect, useRef, useState } from "react";
-import type from "marzipano/src/util/type";
-import { getHotSpot , saveHotspots , deleteHotspot} from "../api/hotspotService";
-import {fetchProject} from "../api/ProjectService";
-import { request } from "../api/apiConfig";
+import { getHotSpot, saveHotspots } from "../api/hotspotService";
 import { useUploadPanoramas } from "../hooks/useUploadPanorama";
 import Loading from "./Loading";
 import { storageFormat } from "../utils/Formats"; 
-import { showPanorama, getPanoramas } from "../api/PanoramaService";
+import { getPanoramas } from "../api/PanoramaService";
+import { buildHotspotPayload, validateHotspots } from "../utils/hotspotValidation";
+
+const PanelHeading = ({ children, count }) => (
+  <div className="mb-3 flex items-center justify-between">
+    <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-surface/50">{children}</h2>
+    {count !== undefined && <span className="text-xs text-primary">{count}</span>}
+  </div>
+);
+
+const SceneTool = ({ icon, title, description, onClick }) => (
+  <button type="button" onClick={onClick} className="group flex w-full items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-3 text-left transition duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/60">
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-primary/30">{icon}</span>
+    <span><span className="block text-sm font-semibold text-white">{title}</span><span className="block text-[11px] text-surface/50">{description}</span></span>
+  </button>
+);
+
+const panoramaSource = (panorama, fallback) => panorama?.image_path ? storageFormat(panorama.image_path) : fallback;
+
+const panoramaDescription = (panorama, index = 0) => {
+  if (panorama?.description) return panorama.description;
+  if (panorama?.title) return panorama.title;
+  if (panorama?.name) return panorama.name;
+
+  const filename = panorama?.image_path?.split('/').pop()?.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ').trim();
+  return filename || `Scene ${index + 1}`;
+};
+
+const PanoramaLibrary = ({ panoramas, activePanoramaId, isLoading, isFetching, onUpload, onSelect }) => (
+  <section className="flex min-h-0 flex-1 flex-col border-t border-white/10 pt-6">
+    <PanelHeading count={panoramas.length}>Panorama library</PanelHeading>
+    <label className="relative flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-primary px-4 text-[11px] font-bold uppercase tracking-widest text-white transition duration-300 hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 focus-within:ring-2 focus-within:ring-primary/60">
+      <Loading isLoading={isLoading} />
+      <span>{isLoading ? "Uploading..." : "Upload 360 view"}</span>
+      <input type="file" multiple disabled={isLoading} accept="image/*" className="hidden" onChange={onUpload} />
+    </label>
+    <div className="panorama-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+      {panoramas.length === 0 ? (
+        <div className="relative flex min-h-20 items-center justify-center rounded-xl border border-dashed border-white/10 px-4 text-center text-xs text-surface/40">
+          <Loading isLoading={isFetching} />
+          {!isFetching && "No scenes uploaded yet"}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
+          {panoramas.map((panorama, index) => (
+            <button type="button" key={panorama.id} onClick={() => onSelect(panorama)} className={`group overflow-hidden rounded-xl border bg-white/5 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/60 ${activePanoramaId === panorama.id ? "border-primary ring-2 ring-primary/30" : "border-white/10 hover:border-primary/50"}`}>
+              <img src={storageFormat(panorama.image_path)} alt={`Panorama scene ${panorama.id}`} className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" />
+              <p className="truncate px-2 pt-2 text-[9px] font-bold uppercase tracking-wider text-surface/50">{panoramaDescription(panorama, index)}</p>
+              <p className={`px-2 pb-2 pt-1 text-[9px] ${activePanoramaId === panorama.id ? "text-primary" : "text-surface/40"}`}>{activePanoramaId === panorama.id ? "Active scene" : "Open scene"}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+);
 
 
-const PanoramaViewer = ({ imageUrl }) => {
+const PanoramaViewer = ({ imageUrl, projectId, clientName }) => {
+  const normalizedProjectId = Number(projectId);
+  const hasProjectId = Number.isInteger(normalizedProjectId) && normalizedProjectId > 0;
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
   const sceneMapRef = useRef({}); // Stores ALL created Marzipano scenes by ID
   const viewerRef = useRef(null);
   const openControlsRef = useRef(null);
-  const openControlImageRef = useRef(null);
   const [panoramas, setPanoramas] = useState([]);
+  const [activePanorama, setActivePanorama] = useState(null);
   const [hotspots, setHotspots] = useState([]);
-  const [rotation, setRotation] = useState(0);
   const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
   const clickedObjectIDRef = useRef(null);
-  const count = useRef(0);
   const panoramaRef = useRef(0)
   const openHotspotPanoramaControls = useRef(null); // Store controls for each hotspot by unique_id
   const panoramasRef = useRef([]); // Store panoramas in a ref for access in event handlers without stale closures
+  const activePanoramaRef = useRef(null);
   const linkHotspotRegistry = useRef({});
 
 
- const { uploadPanoramas, isLoading, errorMessage } = useUploadPanoramas();
+ const { uploadPanoramas, isLoading } = useUploadPanoramas();
+
+  const notifySuccess = (message) => {
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(""), 3500);
+  };
 
   const createMarzipanoScene = (sceneId, imageSource) => {
     const viewer = viewerRef.current;
@@ -60,23 +120,9 @@ const PanoramaViewer = ({ imageUrl }) => {
   };
   
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !hasProjectId) return;
+    let cancelled = false;
 
-    const initializeData = async () => {
-    try {
-      // 1. Wait for Panoramas to finish and update state
-      await handleGetPanoramas();
-      
-    } catch (error) {
-      console.error("Initialization error:", error);
-    }finally{
-         // 2. Wait for Hotspots to finish
-      await handleGetHotspots();
-    }
-  };
-
-  initializeData();
-    
     const viewerOpts = {
       controls: { mouseViewMode: "drag", dragSpeed: 0.6, zoomSpeed: 0.6 },
       stageType: "webgl",
@@ -86,9 +132,6 @@ const PanoramaViewer = ({ imageUrl }) => {
     viewerRef.current = viewer;
 
     sceneMapRef.current = {};
-    const sceneInstance = createMarzipanoScene("main-scene", imageUrl);
-    sceneInstance.switchTo({ transitionDuration: 400 });
-    sceneRef.current = sceneInstance;
 
     const handleStageClick = () => {
       if (openControlsRef.current) {
@@ -107,11 +150,36 @@ const PanoramaViewer = ({ imageUrl }) => {
     const stageElement = viewer.domElement();
     stageElement.addEventListener('click', handleStageClick);
 
+    const initializeData = async () => {
+      try {
+        const loadedPanoramas = await handleGetPanoramas();
+        if (cancelled) return;
+        const firstPanorama = loadedPanoramas?.[0] ?? null;
+        const firstSceneId = firstPanorama ? `panorama-${firstPanorama.id}` : 'fallback-scene';
+        const firstScene = createMarzipanoScene(firstSceneId, panoramaSource(firstPanorama, imageUrl));
+
+        if (!firstScene) return;
+
+        firstScene.switchTo({ transitionDuration: 400 });
+        sceneRef.current = firstScene;
+        panoramaRef.current = firstPanorama?.id ?? 1;
+        activePanoramaRef.current = firstPanorama;
+        setActivePanorama(firstPanorama);
+
+        await handleGetHotspots(firstPanorama?.id, () => cancelled);
+      } catch (error) {
+        console.error("Initialization error:", error);
+      }
+    };
+
+    initializeData();
+
     return () => {
+      cancelled = true;
       stageElement.removeEventListener('click', handleStageClick);
       viewer.destroy();
     };
-  }, [imageUrl]);
+  }, [imageUrl, hasProjectId, normalizedProjectId]);
 
   // --- NEW FUNCTION: Spawn Hotspot at Center ---
 const spawnHotspotAtCenter = () => {
@@ -167,8 +235,6 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
   // These need to be accessible to the dragging logic later
   let hotspotObject;
   let interactionElement; // The thing the user clicks to drag (img or button)
-  let clickedObjectID = null;
-
   // --- TYPE: STANDARD HOTSPOT ---
   if (hotspotType === 'INFO') {
 
@@ -182,9 +248,17 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     editBtn.className = 'hotspot-btn edit-btn';
     editBtn.innerHTML = '✎';
 
+    editBtn.type = 'button';
+    editBtn.title = 'Edit hotspot';
+    editBtn.setAttribute('aria-label', 'Edit hotspot');
+    editBtn.innerHTML = '&#9998;';
+
     const delBtn = document.createElement('button');
     delBtn.className = 'hotspot-btn del-btn';
-    delBtn.innerHTML = '✖';
+    delBtn.type = 'button';
+    delBtn.title = 'Delete hotspot';
+    delBtn.setAttribute('aria-label', 'Delete hotspot');
+    delBtn.innerHTML = '&times;';
 
     controlsWrapper.appendChild(editBtn);
     controlsWrapper.appendChild(delBtn);
@@ -196,16 +270,18 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     title.type = 'text';
     title.className = 'hotspot-field hotspot-title';
     title.placeholder = 'Enter title...';
+    title.value = newHotspot.title ?? '';
     labelWrapper.appendChild(title);
 
     const shortDescription = document.createElement('input');
     shortDescription.type = 'text';
     shortDescription.className = 'hotspot-field';
-    shortDescription.placeholder = 'Enter short description...';
+    shortDescription.placeholder = 'Enter description...';
+    shortDescription.value = newHotspot.description ?? '';
     labelWrapper.appendChild(shortDescription);
 
     const img = document.createElement('img');
-    img.src = redIcon;
+    img.src = panoramaMarker;
     img.className = 'hotspot-img';
 
     visual.appendChild(controlsWrapper);
@@ -224,23 +300,28 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
         openControlsRef.current = isHidden ? controlsWrapper : null;
         
         //ref for current selected object
-        clickedObjectIDRef.current = hotspotObject.position();
+        clickedObjectIDRef.current = { ...hotspotObject.position(), unique_id };
       }
     });
 
     delBtn.onclick = (e) => {
       e.stopPropagation();
-
-      removeHotspotHook();
-
+      removeHotspotHook(hotspotObject);
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
-
     };
 
     [title, controlsWrapper].forEach(el => {
       el.addEventListener('click', (e) => e.stopPropagation());
       el.addEventListener('mousedown', (e) => e.stopPropagation());
+    });
+
+    title.addEventListener('input', (event) => {
+      updateInfoHotspot(newHotspot.unique_id, 'title', event.target.value);
+    });
+
+    shortDescription.addEventListener('input', (event) => {
+      updateInfoHotspot(newHotspot.unique_id, 'description', event.target.value);
     });
 
     interactionElement = img; // We drag by the image
@@ -255,13 +336,14 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     controlsWrapper.style.display = 'none';
 
     const linkNavigation = document.createElement('button');
-    linkNavigation.className = "group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm";
-    linkNavigation.style.outline = '2px solid white';
-    linkNavigation.style.outlineOffset = '-4px';
+    linkNavigation.className = 'hotspot-link-navigation';
+    linkNavigation.type = 'button';
+    linkNavigation.title = 'Open room connection';
+    linkNavigation.setAttribute('aria-label', 'Open room connection');
     linkNavigation.style.transform = `rotate(${currentRotation}deg)`;
 
     linkNavigation.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="black" class="w-5 h-5 transition-transform duration-500">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="currentColor" class="hotspot-link-icon">
         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
       </svg>
     `;
@@ -270,10 +352,17 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     editBtn.className = 'hotspot-btn edit-btn';
     editBtn.innerHTML = '✎';
 
+    editBtn.type = 'button';
+    editBtn.title = 'Edit connection';
+    editBtn.setAttribute('aria-label', 'Edit connection');
+    editBtn.innerHTML = '&#9998;';
+
     const delBtn = document.createElement('button');
     delBtn.className = 'hotspot-btn del-btn';
-    delBtn.innerHTML = '✖';
-
+    delBtn.type = 'button';
+    delBtn.title = 'Delete connection';
+    delBtn.setAttribute('aria-label', 'Delete connection');
+    delBtn.innerHTML = '&times;';
     const rotateLeftBtn = document.createElement('button');
     rotateLeftBtn.className = 'hotspot-btn rotate-btn';
     rotateLeftBtn.innerHTML = '⤾';
@@ -282,6 +371,16 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     rotateRightBtn.className = 'hotspot-btn rotate-btn';
     rotateRightBtn.innerHTML = '⤿';
 
+    rotateLeftBtn.type = 'button';
+    rotateLeftBtn.title = 'Rotate left';
+    rotateLeftBtn.setAttribute('aria-label', 'Rotate left');
+    rotateLeftBtn.innerHTML = '&#8634;';
+    rotateRightBtn.type = 'button';
+    rotateRightBtn.title = 'Rotate right';
+    rotateRightBtn.setAttribute('aria-label', 'Rotate right');
+    rotateRightBtn.innerHTML = '&#8635;';
+
+    let selectedNextSceneId = newHotspot.next_scene_id ?? null;
     let selectedNextScenePath = newHotspot.next_scene_path ?? null;
 
     //next scene
@@ -304,11 +403,19 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
         return;
       }
 
-      const nextScene = createMarzipanoScene(`linked-scene-${unique_id}-${selectedNextScenePath}`, selectedNextScenePath);
-      if (!nextScene) return;
+      const selectedPanorama = panoramasRef.current.find((panorama) =>
+        (selectedNextSceneId && String(panorama.id) === String(selectedNextSceneId)) ||
+        storageFormat(panorama.image_path) === selectedNextScenePath
+      );
 
-      nextScene.switchTo({ transitionDuration: 700 });
-      sceneRef.current = nextScene;
+      if (selectedPanorama) {
+        handleSelectPanorama(selectedPanorama);
+      } else {
+        const nextScene = createMarzipanoScene(`linked-scene-${unique_id}-${selectedNextScenePath}`, selectedNextScenePath);
+        if (!nextScene) return;
+        nextScene.switchTo({ transitionDuration: 700 });
+        sceneRef.current = nextScene;
+      }
 
       controlsWrapper.style.display = 'none';
       ImagesContainer.style.display = 'none';
@@ -333,12 +440,11 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
 
     delBtn.onclick = (e) => {
       e.stopPropagation();
+      removeHotspotHook(hotspotObject);
       container.destroyHotspot(hotspotObject);
       if (openControlsRef.current === controlsWrapper) openControlsRef.current = null;
+    };
 
-      removeHotspotHook();
-    }
-  
     //images 
     const ImagesContainer  = document.createElement('div');
     ImagesContainer.className = 'hotspot-toolbar-images';
@@ -361,8 +467,9 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
           image.key = panorama.id;
           image.src = imagePath;
           image.dataset.imagePath = imagePath;
+          image.dataset.panoramaId = String(panorama.id);
 
-          if (imagePath === selectedNextScenePath) {
+          if ((selectedNextSceneId && String(panorama.id) === String(selectedNextSceneId)) || imagePath === selectedNextScenePath) {
             image.classList.add('selected-panorama-image');
           }
       
@@ -381,8 +488,10 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
 
         e.stopPropagation();
         selectedNextScenePath = clickedImage.dataset.imagePath || clickedImage.src;
+        selectedNextSceneId = clickedImage.dataset.panoramaId || null;
         nextSceneBtn.disabled = false;
         nextSceneBtn.dataset.selectedImagePath = selectedNextScenePath;
+        nextSceneBtn.dataset.selectedPanoramaId = selectedNextSceneId || '';
 
         imageWrapper.querySelectorAll('img').forEach((image) => {
           image.classList.toggle('selected-panorama-image', image === clickedImage);
@@ -391,7 +500,11 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
         setHotspots((prev) => {
           return prev.map((hotspot) => {
             if (hotspot.unique_id === unique_id) {
-              return { ...hotspot, next_scene_path: selectedNextScenePath };
+              return {
+                ...hotspot,
+                next_scene_id: selectedNextSceneId,
+                next_scene_path: selectedNextScenePath,
+              };
             }
 
             return hotspot;
@@ -421,13 +534,13 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
         openControlsRef.current = isHidden ? controlsWrapper : null;
 
         const isPanoramaHidden = ImagesContainer.style.display === 'none';
-        imageWrapper.style.display = isPanoramaHidden ? 'block' : 'none'; // Track this specific hotspot's controls
+        imageWrapper.style.display = isPanoramaHidden ? 'grid' : 'none'; // Track this specific hotspot's controls
         ImagesContainer.style.display = isPanoramaHidden ? 'block' : 'none';
         openHotspotPanoramaControls.current = isPanoramaHidden ? ImagesContainer : null; // Store reference to this hotspot's panorama controls
       }
 
       //ref for current selected object
-      clickedObjectIDRef.current = hotspotObject.position();
+      clickedObjectIDRef.current = { ...hotspotObject.position(), unique_id };
     });
 
     
@@ -448,17 +561,53 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
   anchor.appendChild(visual);
   hotspotObject = container.createHotspot(anchor, newHotspot);
 
-  const newHotspots = hotspotObject;
+  setHotspotHook({ ...newHotspot, ...hotspotObject.position(), unique_id });
 
-  setHotspotHook(newHotspots.position());
+  // The floating editors are controls, not part of the drag surface. Keep
+  // their events away from Marzipano and away from the hotspot drag loop so
+  // clicking a toolbar button can never change the saved coordinates.
+  const hotspotControlSelector = '.hotspot-toolbar, .hotspot-toolbar-images, .hotspot-label-wrapper, .hotspot-field';
+  const stopHotspotControlEvent = (event) => {
+    if (event.target.closest(hotspotControlSelector)) {
+      event.stopPropagation();
+    }
+  };
+
+  ['pointerdown', 'mousedown', 'pointermove', 'mousemove', 'click', 'wheel'].forEach((eventName) => {
+    visual.addEventListener(eventName, stopHotspotControlEvent);
+  });
 
   // --- UNIVERSAL DRAGGING LOGIC ---
   let isDragging = false;
   let didMove = false;
+  let dragStartPoint = null;
+  const dragThreshold = 5;
+
+  // Controls and empty space inside the visual should never move the hotspot.
+  // Only the marker/link button is an intentional drag handle.
+  visual.addEventListener('mousedown', (e) => {
+    if (e.target !== interactionElement && !interactionElement.contains(e.target)) {
+      e.stopPropagation();
+    }
+  });
 
   const onMouseMove = (e) => {
     if (!isDragging) return;
-    didMove = true;
+    if (e.target.closest(hotspotControlSelector)) return;
+
+    if (!didMove && dragStartPoint) {
+      const distance = Math.hypot(
+        e.clientX - dragStartPoint.x,
+        e.clientY - dragStartPoint.y
+      );
+
+      // A click is not a drag. Wait for a deliberate movement before
+      // changing the hotspot coordinates.
+      if (distance < dragThreshold) return;
+      didMove = true;
+      visual.classList.add('dragging');
+    }
+
     const rect = containerRef.current.getBoundingClientRect();
     const newCoords = activeScene.view().screenToCoordinates({ 
       x: e.clientX - rect.left, 
@@ -470,6 +619,7 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
 
   const onMouseUp = () => {
     isDragging = false;
+    dragStartPoint = null;
     visual.classList.remove('dragging');
     viewer.controls().enable();
     window.removeEventListener('mousemove', onMouseMove);
@@ -477,9 +627,10 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     setTimeout(() => { didMove = false; }, 50);
     
     //get final position after moved
-    const finalPositionafterMoved = hotspotObject.position();
-
-    setHotspotHook(finalPositionafterMoved);
+    if (didMove) {
+      const finalPositionafterMoved = hotspotObject.position();
+      setHotspotHook({ ...finalPositionafterMoved, unique_id });
+    }
 
   };
 
@@ -488,7 +639,8 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
     e.stopImmediatePropagation();
     e.preventDefault();
     isDragging = true;
-    visual.classList.add('dragging');
+    didMove = false;
+    dragStartPoint = { x: e.clientX, y: e.clientY };
     viewer.controls().disable();
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -502,7 +654,11 @@ const handleFileChange = async (e) => {
 
   try {
 
-    const response = await uploadPanoramas(files, 1);
+    if (!hasProjectId) {
+      throw new Error("A valid project is required before uploading panoramas.");
+    }
+
+    const response = await uploadPanoramas(files, normalizedProjectId);
 
     setPanoramas((prev) => {
       const existingIdsArray = prev.map(item => item.id);
@@ -510,8 +666,12 @@ const handleFileChange = async (e) => {
         !existingIdsArray.includes(image.id)
       );
 
-      return [...prev, ...uniquenewImages];
+      const updatedPanoramas = [...prev, ...uniquenewImages];
+      panoramasRef.current = updatedPanoramas;
+      return updatedPanoramas;
     });
+
+    notifySuccess(`${files.length} panorama${files.length === 1 ? "" : "s"} uploaded successfully.`);
 
   
   } catch (error) {
@@ -522,14 +682,19 @@ const handleFileChange = async (e) => {
 
 //function
 const setHotspotHook = (newHotspot) => {
+  if (newHotspot?.unique_id === undefined || newHotspot?.unique_id === null) return;
 
   setHotspots((prev) => {
-    const exists = prev.some(h => h.unique_id === newHotspot.unique_id);
+    const hotspotId = String(newHotspot.unique_id);
+    const exists = prev.some((hotspot) => String(hotspot.unique_id) === hotspotId);
     
     if (exists) {
       // MERGE instead of REPLACE to keep metadata (titles, links, etc.)
-      return prev.map(h => 
-        h.unique_id === newHotspot.unique_id ? { ...h, ...newHotspot } : h
+      return prev.map((hotspot) => (
+        String(hotspot.unique_id) === hotspotId
+          ? { ...hotspot, ...newHotspot, unique_id: hotspot.unique_id }
+          : hotspot
+      )
       );
     } 
   
@@ -538,14 +703,23 @@ const setHotspotHook = (newHotspot) => {
   });
 };
 
-const removeHotspotHook = () => {
-  setHotspots((prev) => prev.filter((loopHotspot) => loopHotspot.unique_id !== clickedObjectIDRef.current.unique_id));
-}
+const updateInfoHotspot = (uniqueId, field, value) => {
+  setHotspots((prev) => prev.map((hotspot) => (
+    String(hotspot.unique_id) === String(uniqueId)
+      ? { ...hotspot, [field]: value }
+      : hotspot
+  )));
+};
+
+const removeHotspotHook = (hotspotObject) => {
+  const hotspotId = hotspotObject?.userData?.unique_id ?? clickedObjectIDRef.current?.unique_id;
+  setHotspots((prev) => prev.filter((hotspot) => hotspot.unique_id !== hotspotId));
+};
 
 const handleLinkHotspotRotation = (unique_id, newRotation) => {
   setHotspots((prev) => {
       return prev.map((hotspot) => {
-          if(hotspot.unique_id === unique_id){
+          if(String(hotspot.unique_id) === String(unique_id)){
             return {...hotspot, rotation: newRotation}
           }else {
             return hotspot;
@@ -557,34 +731,36 @@ const handleLinkHotspotRotation = (unique_id, newRotation) => {
 const handleSaveHotspot = async() => {
 
   try { 
+   setValidationMessage("");
 
-  //if not delete hotspot, then delete records in the database
-   if(hotspots.length <= 0 ) {
+   if(hotspots.length > 0) {
+      const uniqueHotspots = Array.from(
+        new Map(
+          hotspots
+            .filter((hotspot) => hotspot?.unique_id !== undefined && hotspot?.unique_id !== null)
+            .map((hotspot) => [String(hotspot.unique_id), hotspot])
+        ).values()
+      );
 
-    const payload = {
-      hotspotId : null,
-      panoramaId : panoramaRef
-    }
+      const validationError = validateHotspots(uniqueHotspots);
+      if (validationError) {
+        setValidationMessage(validationError);
+        return;
+      }
 
-    await deleteHotspot(payload);
-
-   }else {
       const payload = {
-        hotspots : hotspots.map(function (hotspot) {
-              return {
-                project_id: 1,
-                panorama_id: 1,
-                image_Id : hotspot.image_id ?? null,
-                unique_id: hotspot.unique_id,
-                details: hotspot,
-                rotation: hotspot.rotation ?? 0
-              }
-          })
+        hotspots: uniqueHotspots.map((hotspot) => buildHotspotPayload(
+          hotspot,
+          projectId,
+          panoramaRef.current,
+        ))
       }
 
       //save
       await saveHotspots(payload);
    }
+
+   notifySuccess("Hotspot changes saved manually.");
 
   } catch (error) {
     console.error(error);
@@ -636,9 +812,9 @@ const handleSaveHotspot = async() => {
   //     }
   // };
 
-  const handleGetPanoramas = async () => {
+  async function handleGetPanoramas() {
   try {
-    const payload = { user_id: 1 };
+    const payload = { user_id: 1, project_id: normalizedProjectId };
     setIsPanoramaFetchingLoading(true);
 
     const panoramaData = await getPanoramas(payload);
@@ -680,32 +856,37 @@ const handleSaveHotspot = async() => {
     // FIX: Set to false so the loading spinner actually hides
     setIsPanoramaFetchingLoading(false); 
   }
-};
+}
 
-  const handleGetHotspots = async() => {
+  async function handleGetHotspots(panoramaId = panoramaRef.current, isCancelled = () => false) {
 
     try {
 
       const payload = {
-        project_id : 1
+        project_id : projectId
       };
 
       const hotspotsResponse = await getHotSpot(payload);
+      if (isCancelled()) return;
 
-      const response = hotspotsResponse?.data;
+      const response = hotspotsResponse?.data ?? [];
+      const sceneHotspots = panoramaId
+        ? response.filter((hotspot) => Number(hotspot.panorama_id) === Number(panoramaId))
+        : response;
 
-      response.map((response)=> {
+      setHotspots([]);
+
+      sceneHotspots.forEach((hotspot)=> {
+        if (isCancelled()) return;
 
         try {
 
-          if(response.details && response.details !== ""){
+          if(hotspot.details && hotspot.details !== ""){
         
-            const parseDetails = JSON.parse(response.details);
-            setHotspotHook(parseDetails);
-            if(count.current == 0){
-              panoramaRef.current = response.panorama_id;
-              addHotspot(parseDetails, parseDetails.type)
-            }
+            const parseDetails = typeof hotspot.details === 'string'
+              ? JSON.parse(hotspot.details)
+              : hotspot.details;
+            addHotspot(parseDetails, parseDetails.type);
           
           }
           
@@ -716,121 +897,95 @@ const handleSaveHotspot = async() => {
        
       });  
       
-      count.current++;
-      
     } catch (error) {
       console.error(error);
       throw error;
     }    
   }
 
+  const handleSelectPanorama = async (panorama) => {
+    if (!panorama?.id || Number(activePanoramaRef.current?.id) === Number(panorama.id)) return;
+
+    const nextScene = createMarzipanoScene(`panorama-${panorama.id}`, panoramaSource(panorama, imageUrl));
+    if (!nextScene) return;
+
+    nextScene.switchTo({ transitionDuration: 500 });
+    sceneRef.current = nextScene;
+    panoramaRef.current = panorama.id;
+    activePanoramaRef.current = panorama;
+    setActivePanorama(panorama);
+
+    await handleGetHotspots(panorama.id);
+    notifySuccess(`${panoramaDescription(panorama)} is now the active scene.`);
+  };
+
+  if (!hasProjectId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-navy p-6 text-center font-body text-white">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl">
+          <h1 className="font-display text-2xl font-black">Project unavailable</h1>
+          <p className="mt-2 text-sm text-surface/60">Open the scene editor from a valid project.</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
-      {/* SIDEBAR */}
-      <div 
-    style={{ width: "220px", background: "#1a1a1a", color: "white", padding: "20px", zIndex: 99999 }} 
-    className="flex flex-col gap-6 shadow-2xl rounded-l-lg border-l border-gray-800 min-h-screen overflow-y-auto"
-  >
-    {/* SECTION: HOTSPOTS */}
-    <section>
-      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Add Hotspot</h3>
-      <div 
-        onClick={spawnHotspotAtCenter}
-        className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
-      >
-        <img src={redIcon} className="w-10 h-10 transition-transform group-hover:scale-110" alt="Hotspot" />
-      </div>
-    </section>
+    <main className="flex min-h-screen w-full flex-col overflow-hidden bg-navy font-body text-surface lg:flex-row">
+      {successMessage && (
+        <div role="status" aria-live="polite" className="panorama-toast fixed right-4 top-4 z-[100000] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-xl border border-primary/40 bg-navy/95 px-4 py-3 text-sm text-white shadow-2xl shadow-navy/30 backdrop-blur-xl sm:right-6 sm:top-6">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-black text-white">✓</span>
+          <span>{successMessage}</span>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setSuccessMessage("")} className="ml-2 text-lg leading-none text-surface/50 transition hover:text-white">×</button>
+        </div>
+      )}
+      {validationMessage && (
+        <div role="alert" aria-live="assertive" className="panorama-toast fixed right-4 top-20 z-[100000] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-xl border border-red-400/40 bg-red-950/95 px-4 py-3 text-sm text-white shadow-2xl shadow-navy/30 backdrop-blur-xl sm:right-6 sm:top-20">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-500 text-xs font-black text-white">!</span>
+          <span>{validationMessage}</span>
+          <button type="button" aria-label="Dismiss validation message" onClick={() => setValidationMessage("")} className="ml-2 text-lg leading-none text-surface/50 transition hover:text-white">×</button>
+        </div>
+      )}
+      {/* CONTROL RAIL */}
+      <aside className="relative z-10 flex max-h-[50vh] w-full shrink-0 flex-col border-b border-white/10 bg-navy/95 p-5 shadow-2xl backdrop-blur-xl lg:h-screen lg:max-h-screen lg:w-[19rem] lg:border-b-0 lg:border-r lg:p-6">
+        <div className="mb-8 flex items-center justify-between lg:block">
+          <div>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Vistri 360</p>
+            <h1 className="font-display text-2xl font-black tracking-tight text-white">Tour studio</h1>
+          </div>
+          <span className="flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-primary">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" /> Live
+          </span>
+        </div>
 
-     <section>
-      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Add Link Hotspot</h3>
-      <div 
-        onClick={spawnLinkHotspotAtCenter}
-        className="group relative flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-red-500 transition-all cursor-pointer"
-      >
-          <button
-          // onClick={spawnHotspotAtCenter}
-          className="group relative flex items-center justify-center w-10 h-10 rounded-full bg-white/80 border-2 border-gray-400 transition-transform duration-300 hover:scale-110 shadow-sm"
-          style={{ outline: '2px solid white', outlineOffset: '-4px' }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={3.5}
-            stroke="currentColor"
-            className="w-5 h-5 text-gray-900 transition-transform duration-500"
-            // style={{ transform: `rotate(${rotation}deg)` }}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
-          </svg>
-        </button>
-      </div>
-    </section>
+        <div className="mb-7 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-surface/50">Current tour</p>
+          <p className="mt-2 truncate font-display text-lg font-semibold text-white">{clientName ? `${clientName} · ` : ""}{panoramaDescription(activePanorama)}</p>
+          <p className="mt-1 text-xs text-surface/60">Modify this scene and connect it to the next location.</p>
+        </div>
 
-    <hr className="border-zinc-800" />
+        <section className="mb-7 space-y-3">
+          <PanelHeading>Add to scene</PanelHeading>
+          <SceneTool onClick={spawnHotspotAtCenter} title="Information tag" description="Place a detail at center view" icon={<img src={panoramaMarker} className="h-7 w-7 object-contain transition-transform group-hover:scale-110" alt="" />} />
+          <SceneTool onClick={spawnLinkHotspotAtCenter} title="Room connection" description="Link another panorama" icon={<svg className="h-5 w-5 text-white transition-transform group-hover:-translate-y-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" /></svg>} />
+        </section>
 
-    {/* SECTION: UPLOAD & GALLERY */}
-    <section>
-      <h3 className="mb-3 text-[10px] tracking-widest text-gray-500 font-bold uppercase">Panorama Library</h3>
-      
-      {/* Upload Button */}
-     <label className="relative flex items-center justify-center gap-2 w-full h-[35px] py-2 px-4 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-all duration-300 mb-4 overflow-hidden">
-              {/* 1. THE SPINNER LAYER */}
-              <Loading isLoading={isLoading} />
-              <span>+ UPLOAD 360 VIEWS</span>
-              <input 
-                type="file" 
-                multiple 
-                disabled={isLoading} // Professional touch: disable while uploading
-                accept="image/*"
-                className="hidden" 
-                onChange={handleFileChange}
-              />
-            </label>
-         
+        <PanoramaLibrary panoramas={panoramas} activePanoramaId={activePanorama?.id} isLoading={isLoading} isFetching={isPanoramaFetchingLoading} onUpload={handleFileChange} onSelect={handleSelectPanorama} />
 
-                {panoramas.length === 0 ? (
-                    <div className="relative items-center justify-center">
-                      <Loading isLoading={isPanoramaFetchingLoading} />                     
-                    </div>
-                    ) : (
-                    <div className="grid grid-cols-3 gap-2">
-                      {panoramas.map((panorama) => {
+        <button type="button" onClick={handleSaveHotspot} className="mt-5 w-full shrink-0 rounded-xl bg-white py-3 text-xs font-bold uppercase tracking-widest text-navy transition hover:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/60">Save manually</button>
+      </aside>
 
-                        return (
-                            <div key={panorama.id} className="p-2 border border-zinc-700 rounded">
-                              <img 
-                                src={storageFormat(panorama.image_path)} 
-                                alt="Panorama View"
-                                className="w-full h-auto rounded"
-                                // Troubleshooting tip: log if the specific image fails to load
-                                onError={() => console.error(`Failed to load image at: ${fullImagePath}`)}
-                              />
-                              <p className="text-[10px] mt-1 text-center">ID: {panorama.id}</p>
-                            </div>
-                          );
-
-                        })}
-                    </div>
-              )}
-    </section>
-
-    <section>
-      <button 
-        onClick={handleSaveHotspot} 
-        className="bg-indigo-600 hover:bg-indigo-700 text-white "
-          >
-        Sync Changes
-      </button>
-    </section>
-  </div>
-      {/* VIEWER AREA */}
-      <div 
-        ref={containerRef} 
-        style={{ flex: 1, position: "relative", background: "#000" }}
-      />
-    </div>
+      {/* PANORAMA STAGE */}
+      <section className="relative flex min-h-[70vh] flex-1 flex-col bg-surface p-3 sm:p-5 lg:min-h-screen lg:p-8">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-white/20 bg-navy shadow-[0_30px_100px_rgba(19,41,61,0.3)]">
+          <div className="pointer-events-none absolute inset-0 z-[1] bg-linear-to-t from-navy/70 via-transparent to-navy/10" />
+          <div className="pointer-events-none absolute left-5 top-5 z-[2] max-w-[calc(100%-2.5rem)] truncate rounded-full border border-white/20 bg-navy/40 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-white/80 backdrop-blur-md">{panoramaDescription(activePanorama)} <span className="mx-2 text-primary">/</span> Active view</div>
+          <div ref={containerRef} className="relative min-h-[62vh] w-full flex-1 bg-navy lg:min-h-0" />
+          <div className="pointer-events-none absolute bottom-5 left-5 right-5 z-[2] flex items-end justify-between gap-4 sm:bottom-7 sm:left-7 sm:right-7"><div><p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Immersive preview</p><p className="mt-1 font-display text-xl font-semibold text-white sm:text-2xl">{panoramaDescription(activePanorama)}</p></div><span className="hidden rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs text-white/80 backdrop-blur-md sm:block">Scroll to zoom</span></div>
+        </div>
+        <div className="flex items-center justify-between px-1 pt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-navy/50 sm:px-2"><span>360° scene editor</span><span className="text-primary">Changes are saved manually</span></div>
+      </section>
+    </main>
   );
 };
 
