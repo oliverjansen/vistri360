@@ -8,6 +8,7 @@ import { getPanoramas } from "../api/PanoramaService";
 import { buildHotspotPayload, mergePanoramaRecords, mergeSceneHotspots, removeHotspotById, removeHotspotsForDestinations, validateHotspots } from "../utils/hotspotValidation";
 import PanoramaAssetLibrary from "./PanoramaComponents/PanoramaAssetLibrary";
 import PanoramaSceneStrip from "./PanoramaComponents/PanoramaSceneStrip";
+import { createShareLink } from "../api/shareService";
 
 const PanelHeading = ({ children, count }) => (
   <div className="mb-3 flex items-center justify-between">
@@ -57,6 +58,8 @@ const PanoramaViewer = ({ projectId, clientName }) => {
   const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState("");
   const [isSettingFirstScene, setIsSettingFirstScene] = useState(false);
   const clickedObjectIDRef = useRef(null);
   const panoramaRef = useRef(0)
@@ -832,6 +835,23 @@ const handleSaveHotspot = async() => {
 
 }
 
+  const handleExport = async () => {
+    if (!window.confirm("Export this tour and create a temporary public URL? The link will expire in 24 hours.")) return;
+    try {
+      setIsExporting(true);
+      await handleSaveHotspot();
+      const response = await createShareLink(normalizedProjectId);
+      const frontendOrigin = import.meta.env.VITE_FRONTEND_URL || window.location.origin;
+      const url = `${frontendOrigin.replace(/\/$/, '')}/share/${response.data.token}`;
+      setExportUrl(url);
+      await navigator.clipboard?.writeText(url);
+      notifySuccess("Tour endpoint ready. The URL was copied and will update with future saves.");
+    } catch (error) {
+      console.error(error);
+      setValidationMessage("The tour could not be exported. Save your changes and try again.");
+    } finally { setIsExporting(false); }
+  };
+
   // const handleGetPanoramas = async () => {
   //     try {
 
@@ -1156,7 +1176,8 @@ const handleSaveHotspot = async() => {
 
         <PanoramaAssetLibrary panoramas={panoramas} hotspots={hotspots} isLoading={isLoading} isFetching={isPanoramaFetchingLoading} onUpload={handleFileChange} />
 
-        <button type="button" onClick={handleSaveHotspot} className="mt-5 w-full shrink-0 rounded-xl bg-white py-3 text-xs font-bold uppercase tracking-widest text-navy transition hover:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/60">Save manually</button>
+        <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={handleSaveHotspot} className="w-full shrink-0 rounded-xl bg-white py-3 text-[10px] font-bold uppercase tracking-widest text-navy transition hover:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/60">Save manually</button><button type="button" onClick={handleExport} disabled={isExporting} className="w-full shrink-0 rounded-xl bg-primary py-3 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-secondary disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/60">{isExporting ? "Exporting…" : "Export tour"}</button></div>
+        {exportUrl && <div className="mt-3 rounded-xl border border-primary/30 bg-primary/10 p-3"><p className="text-[9px] font-bold uppercase tracking-widest text-primary">Public tour endpoint</p><a className="mt-1 block break-all text-[10px] text-white underline" href={exportUrl} target="_blank" rel="noreferrer">{exportUrl}</a><p className="mt-2 text-[9px] leading-4 text-surface/60">This same URL reflects future saved editor changes.</p></div>}
       </aside>
 
       {/* PANORAMA STAGE */}

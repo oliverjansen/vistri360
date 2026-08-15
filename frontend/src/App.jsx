@@ -18,8 +18,11 @@ import ProjectScenePage from './pages/DashboardPages/ProjectScenePage'
 
 // NotFound 404
 import NotFoundPage from './pages/NotFoundPage';
+import ShareTourPage from './pages/ShareTourPage';
 
 const routes = [
+  { path: '/share/:token', element: <ShareTourPage /> },
+  { path: '/share/*', element: <ShareTourPage /> },
   {
     path: '/',
     element: <LandingPage />,

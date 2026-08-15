@@ -1,6 +1,41 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 @import "tailwindcss";
 
+.share-hotspot {
+  position: relative;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 2px solid rgba(255,255,255,.9);
+  border-radius: 999px;
+  background: #e9a23b;
+  color: #13293d;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 5px 18px rgba(0,0,0,.35);
+}
+.share-hotspot-info { cursor: default; background: #fff; }
+.share-hotspot-detail {
+  position: absolute;
+  bottom: calc(100% + .65rem);
+  left: 50%;
+  display: none;
+  width: 15rem;
+  transform: translateX(-50%);
+  border-radius: .75rem;
+  background: rgba(19,41,61,.96);
+  padding: .75rem;
+  color: white;
+  text-align: left;
+  box-shadow: 0 10px 28px rgba(0,0,0,.35);
+  pointer-events: none;
+}
+.share-hotspot-detail strong, .share-hotspot-detail span { display: block; }
+.share-hotspot-detail strong { font-size: .75rem; }
+.share-hotspot-detail span { margin-top: .25rem; color: rgba(255,255,255,.7); font-size: .7rem; line-height: 1.35; }
+.share-hotspot-info:hover .share-hotspot-detail { display: block; }
+
 
 /* ——— Visby Round CF (woff2) ——— */
 

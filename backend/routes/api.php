@@ -6,6 +6,7 @@ use App\Http\Controllers\HotspotImageController;
 use App\Http\Controllers\PanoramaController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectImageController;
+use App\Http\Controllers\ShareController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('projects')->group(function () {
@@ -46,3 +47,6 @@ Route::prefix('panorama')->group(function () {
         Route::get('/', 'index');
     });
 });
+
+Route::post('/projects/{project}/share', [ShareController::class, 'store']);
+Route::get('/shares/{token}', [ShareController::class, 'show']);
