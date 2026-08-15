@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import PanoramaViewer from "../../components/PanoramaViewer";
 import { fetchProject } from "../../api/ProjectService";
-import samplePanorama from "../../images/sample.jpg";
 
 const SceneSkeleton = () => (
   <div className="min-h-screen animate-pulse bg-linear-to-br from-navy via-secondary/40 to-navy p-6 sm:p-10" aria-label="Loading scene">
@@ -25,7 +24,7 @@ const ProjectScenePage = () => {
   return (
     <main className="relative min-h-screen bg-navy">
       {!isLoading && <Link to={"/dashboard/clients/" + (project?.client_id ?? "")} className="absolute left-4 top-4 z-[100001] inline-flex items-center gap-2 rounded-xl border border-white/20 bg-navy/80 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-white backdrop-blur-md transition hover:bg-primary sm:left-6 sm:top-6"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>Back to projects</Link>}
-      {isLoading ? <SceneSkeleton /> : <PanoramaViewer imageUrl={samplePanorama} projectId={Number(projectId)} clientName={project?.name} />}
+      {isLoading ? <SceneSkeleton /> : <PanoramaViewer projectId={Number(projectId)} clientName={project?.name} />}
     </main>
   );
 };

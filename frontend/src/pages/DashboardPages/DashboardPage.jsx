@@ -2,17 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createClient, deleteClient, fetchClientsCached, invalidateClientsCache } from "../../api/ClientService";
 import ScrollReveal from "../../components/ScrollReveal";
-import sampleInterior from "../../images/sampleimage4.jpg";
-
-const fallbackClients = [
-  { id: 1, name: "Northline Residences", contact_name: "Maya Santos", type: "Residential", status: "In progress", projects_count: 1, image: sampleInterior },
-  { id: 2, name: "Atelier Eight Studio", contact_name: "Daniel Cruz", type: "Commercial", status: "Ready for review", projects_count: 1, image: sampleInterior },
-  { id: 3, name: "Harbour House", contact_name: "Sofia Reyes", type: "Hospitality", status: "Draft", projects_count: 1, image: sampleInterior },
-];
+const fallbackClients = [];
 
 const ClientCard = ({ client, onOpen, onDelete }) => (
   <article role="button" tabIndex="0" onClick={() => onOpen(client)} onKeyDown={(event) => event.key === "Enter" && onOpen(client)} className="group overflow-hidden rounded-2xl border border-white/70 bg-white text-left shadow-[0_16px_45px_rgba(19,41,61,0.07)] transition duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_22px_55px_rgba(19,41,61,0.13)] focus:outline-none focus:ring-2 focus:ring-primary/60">
-    <div className="relative h-40 overflow-hidden bg-navy"><img src={client.image ?? sampleInterior} alt={`${client.name} preview`} className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-105 group-hover:opacity-100" /><div className="absolute inset-0 bg-linear-to-t from-navy/85 via-navy/10 to-transparent" /><span className="absolute left-4 top-4 rounded-full border border-white/20 bg-navy/60 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-md">{client.type ?? "Client"}</span><span className="absolute bottom-4 left-4 text-xs font-semibold text-white">{client.projects_count ?? 0} projects</span></div>
+    <div className="relative flex h-40 items-center justify-center overflow-hidden bg-navy"><span className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/45">No preview available</span><div className="absolute inset-0 bg-linear-to-t from-navy/85 via-transparent to-transparent" /><span className="absolute left-4 top-4 rounded-full border border-white/20 bg-navy/60 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-md">{client.type ?? "Client"}</span><span className="absolute bottom-4 left-4 text-xs font-semibold text-white">{client.projects_count ?? 0} projects</span></div>
     <div className="p-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><h2 className="truncate font-display text-xl font-bold text-navy">{client.name}</h2><p className="mt-1 text-sm text-navy/55">{client.contact_name ?? "No contact assigned"}</p></div><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg text-primary transition group-hover:bg-primary group-hover:text-white">→</span></div><div className="mt-5 flex items-center justify-between border-t border-surface pt-4 text-xs"><span className="font-bold text-primary">{client.status ?? "Draft"}</span><span className="text-navy/40">Open projects</span></div></div>
     <div className="flex justify-end px-5 pb-4"><button type="button" title="Delete client" aria-label={"Delete " + client.name} onClick={(event) => { event.stopPropagation(); onDelete(client); }} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-navy/35 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-400/50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16" /><path d="M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button></div>
   </article>
@@ -75,7 +69,7 @@ const DashboardPage = () => {
     event.preventDefault();
     try {
       const response = await createClient(form);
-      setClients((current) => [{ ...response.data, projects_count: 0, image: sampleInterior }, ...current]);
+      setClients((current) => [{ ...response.data, projects_count: 0 }, ...current]);
       invalidateClientsCache();
       setForm({ name: "", contact_name: "", type: "Residential" });
       setIsFormOpen(false);
