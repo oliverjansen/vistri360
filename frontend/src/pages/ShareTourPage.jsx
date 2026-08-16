@@ -10,9 +10,10 @@ const ShareTourPage = () => {
   const containerRef = useRef(null);
   const [snapshot, setSnapshot] = useState(null);
   const [activeId, setActiveId] = useState(null);
-  const [error, setError] = useState("");
+  const [shareError, setShareError] = useState(null);
+  const contactEmail = import.meta.env.VITE_SUPPORT_EMAIL || "sample.gmail.com";
 
-  useEffect(() => { getShareSnapshot(token).then((response) => setSnapshot(response.data)).catch(() => setError("This share link has expired or is invalid.")); }, [token]);
+  useEffect(() => { getShareSnapshot(token).then((response) => setSnapshot(response.data)).catch((requestError) => setShareError({ expired: requestError.status === 410 })); }, [token]);
 
   useEffect(() => {
     if (!snapshot || !containerRef.current) return undefined;
@@ -69,7 +70,7 @@ const ShareTourPage = () => {
     return () => viewer.destroy();
   }, [snapshot, activeId]);
 
-  if (error) return <main className="flex min-h-screen items-center justify-center bg-navy p-6 text-white"><p>{error}</p></main>;
+  if (shareError) return <main className="flex min-h-screen items-center justify-center bg-navy p-6 font-body text-white"><section role="dialog" aria-modal="true" aria-labelledby="share-access-title" className="w-full max-w-md rounded-3xl border border-white/15 bg-white p-7 text-navy shadow-2xl"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-xl text-primary">{shareError.expired ? "!" : "×"}</div><p className="mt-6 text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Public tour access</p><h1 id="share-access-title" className="mt-2 font-display text-2xl font-black">{shareError.expired ? "This link has expired" : "This link is unavailable"}</h1>{shareError.expired ? <><p className="mt-3 text-sm leading-6 text-navy/60">Please contact us to renew access to this public tour.</p><a href={`mailto:${contactEmail}`} className="mt-6 block rounded-xl bg-navy px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-white transition hover:bg-primary">Contact {contactEmail}</a></> : <p className="mt-3 text-sm leading-6 text-navy/60">This public tour link is invalid or no longer available.</p>}</section></main>;
   if (!snapshot) return <main className="flex min-h-screen items-center justify-center bg-navy p-6 text-white"><p>Loading tour…</p></main>;
   const currentId = activeId ?? snapshot.panoramas.find((item) => item.first_scene)?.id ?? snapshot.panoramas[0]?.id;
   const activeIndex = snapshot.panoramas.findIndex((item) => String(item.id) === String(currentId));
