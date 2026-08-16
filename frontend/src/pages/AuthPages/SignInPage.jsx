@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { login } from '../../api/authService';
 
 const SignInPage = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const [email, setEmail] = useState('user@vistri.test');
+  const [password, setPassword] = useState('password123');
+  const [error, setError] = useState('');
 
-  const handleSignIn = (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
-    navigate('/dashboard');
+    try { const response = await login({ email, password }); localStorage.setItem('vistri_token', response.data.token); navigate(location.state?.from ?? '/dashboard', { replace: true }); } catch { setError('Sign in failed. Check your email and password.'); }
   }
 
   return (
@@ -28,7 +33,8 @@ const SignInPage = () => {
             className="peer w-full rounded-xl border border-surface/80 bg-surface/30 px-5 pb-3 pt-6 font-body text-sm text-navy outline-none transition-all hover:bg-surface/50 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
             placeholder=" "
             required
-            defaultValue="ykharitonova@mentalstack.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
           <label 
             htmlFor="email" 
@@ -46,7 +52,8 @@ const SignInPage = () => {
             className="peer w-full rounded-xl border border-surface/80 bg-surface/30 px-5 pb-3 pt-6 font-body text-sm text-navy outline-none transition-all hover:bg-surface/50 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 pr-12"
             placeholder=" "
             required
-            defaultValue="password123"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
           />
           <label 
             htmlFor="password" 
@@ -68,6 +75,7 @@ const SignInPage = () => {
           </button>
         </div>
 
+        {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
         {/* Options */}
         {/* <div className="flex items-center justify-between mt-2">
           <label className="flex items-center gap-3 cursor-pointer group">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Support\Activity;
 
 class ProjectController extends Controller
 {
@@ -48,6 +49,7 @@ class ProjectController extends Controller
                 'description' => $validated['description'] ?? null,
                 'user_id' => $request->user()?->id ?? 1,
             ]);
+            Activity::log('project.created', $request, $project);
 
             return response()->json([
                 'message' => 'Project created successfully',

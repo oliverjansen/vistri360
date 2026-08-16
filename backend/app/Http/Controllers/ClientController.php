@@ -6,6 +6,7 @@ use App\Models\Client;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Support\Activity;
 
 class ClientController extends Controller
 {
@@ -52,6 +53,7 @@ class ClientController extends Controller
 
         try {
             $client = Client::create($validated);
+            Activity::log('client.created', $request, $client);
 
             return response()->json([
                 'message' => 'Client created successfully',

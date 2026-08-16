@@ -19,6 +19,8 @@ import ProjectScenePage from './pages/PanoramaPages/ProjectScenePage'
 // NotFound 404
 import NotFoundPage from './pages/NotFoundPage';
 import ShareTourPage from './pages/ShareTourPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import ProfilePage from './pages/ProfilePages/ProfilePage';
 
 const routes = [
   { path: '/share/:token', element: <ShareTourPage /> },
@@ -45,22 +47,19 @@ const routes = [
       },
     ],
   },
-    {
+  {
     path: '/dashboard',
-    element: <DashLayout />,
+    element: <ProtectedRoute />,
     errorElement: <NotFoundPage />,
     children: [
       {
-        path: '',
-        element: <DashboardPage />,
-      },
-      {
-        path: 'clients/:clientId',
-        element: <ClientProjectsPage />,
-      },
-      {
-        path: 'clients/:clientId/projects/:projectId',
-        element: <ProjectScenePage />,
+        element: <DashLayout />,
+        children: [
+          { path: '', element: <DashboardPage /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'clients/:clientId', element: <ClientProjectsPage /> },
+          { path: 'clients/:clientId/projects/:projectId', element: <ProjectScenePage /> },
+        ],
       },
     ],
   },

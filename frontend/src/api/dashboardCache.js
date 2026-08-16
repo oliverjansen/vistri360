@@ -29,6 +29,7 @@ export const invalidateCache = (key) => {
 export const getCacheUpdatedAt = (key) => cache.get(key)?.updatedAt ?? null;
 
 export const CACHE_KEYS = {
+  profile: "account:profile",
   clients: "dashboard:clients",
   client: (clientId) => `dashboard:client:${clientId}`,
   projects: (clientId) => `dashboard:projects:${clientId}`,

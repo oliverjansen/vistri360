@@ -1,6 +1,7 @@
 import Marzipano from "marzipano";
 import panoramaMarker from "../../images/panorama-marker.png";
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { saveHotspots } from "../../api/hotspotService";
 import { useUploadPanoramas } from "../../hooks/useUploadPanorama";
 import { storageFormat } from "../../utils/Formats"; 
@@ -38,7 +39,7 @@ const panoramaDescription = (panorama, index = 0) => {
 const MAX_PANORAMA_FILE_SIZE = 50 * 1024 * 1024;
 const SUPPORTED_PANORAMA_TYPES = new Set(["image/jpeg", "image/png"]);
 
-const PanoramaViewer = ({ projectId, clientName }) => {
+const PanoramaViewer = ({ projectId, clientName, backToProjects }) => {
   const normalizedProjectId = Number(projectId);
   const hasProjectId = Number.isInteger(normalizedProjectId) && normalizedProjectId > 0;
   const containerRef = useRef(null);
@@ -521,7 +522,7 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
   let isDragging = false;
   let didMove = false;
   let dragStartPoint = null;
-  const dragThreshold = 5;
+  const dragThreshold = 0;
 
   // Controls and empty space inside the visual should never move the hotspot.
   // Only the marker/link button is an intentional drag handle.
@@ -541,8 +542,8 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
         e.clientY - dragStartPoint.y
       );
 
-      // A click is not a drag. Wait for a deliberate movement before
-      // changing the hotspot coordinates.
+      // Begin updating on the first pointer movement so the hotspot follows
+      // the cursor immediately without a perceptible drag delay.
       if (distance < dragThreshold) return;
       didMove = true;
       visual.classList.add('dragging');
@@ -897,7 +898,7 @@ const handleSaveHotspot = async() => {
 
   async function handleGetPanoramas() {
   try {
-    const payload = { user_id: 1, project_id: normalizedProjectId };
+    const payload = {project_id: normalizedProjectId };
     setIsPanoramaFetchingLoading(true);
 
     const panoramaData = await getPanoramas(payload);
@@ -1152,6 +1153,7 @@ const handleSaveHotspot = async() => {
       )}
       {/* CONTROL RAIL */}
       <aside className="relative z-10 flex max-h-[50vh] w-full shrink-0 flex-col border-b border-white/10 bg-navy/95 p-5 shadow-2xl backdrop-blur-xl lg:h-screen lg:max-h-screen lg:w-[19rem] lg:border-b-0 lg:border-r lg:p-6">
+        {backToProjects && <Link to={backToProjects} className="mb-5 inline-flex w-fit items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:border-primary hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary/60"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>Back to projects</Link>}
         <div className="mb-8 flex items-center justify-between lg:block">
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Vistri 360</p>
