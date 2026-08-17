@@ -13,11 +13,18 @@ import SignInPage from './pages/AuthPages/SignInPage'
 // Dashboard Structure
 import DashLayout from './layouts/DashLayout'
 import DashboardPage from './pages/DashboardPages/DashboardPage'
+import ClientProjectsPage from './pages/PanoramaPages/ClientProjectsPage'
+import ProjectScenePage from './pages/PanoramaPages/ProjectScenePage'
 
 // NotFound 404
 import NotFoundPage from './pages/NotFoundPage';
+import ShareTourPage from './pages/ShareTourPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import ProfilePage from './pages/ProfilePages/ProfilePage';
 
 const routes = [
+  { path: '/share/:token', element: <ShareTourPage /> },
+  { path: '/share/*', element: <ShareTourPage /> },
   {
     path: '/',
     element: <LandingPage />,
@@ -40,14 +47,19 @@ const routes = [
       },
     ],
   },
-    {
+  {
     path: '/dashboard',
-    element: <DashLayout />,
+    element: <ProtectedRoute />,
     errorElement: <NotFoundPage />,
     children: [
       {
-        path: '',
-        element: <DashboardPage />,
+        element: <DashLayout />,
+        children: [
+          { path: '', element: <DashboardPage /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'clients/:clientId', element: <ClientProjectsPage /> },
+          { path: 'clients/:clientId/projects/:projectId', element: <ProjectScenePage /> },
+        ],
       },
     ],
   },

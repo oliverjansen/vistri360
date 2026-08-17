@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:hotspots": "node --test src/utils/hotspotValidation.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

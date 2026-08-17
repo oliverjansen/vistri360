@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class Hotspot extends Model
 {
+    protected $casts = [
+        'details' => 'array',
+    ];
+
     public function hotspotImage(){
         return $this->hasMany(HotspotImage::class);
     }

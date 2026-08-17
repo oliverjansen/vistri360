@@ -5,10 +5,10 @@ export const useUploadPanoramas = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
 
-    const uploadPanoramas = async(files, user_id) => {
+    const uploadPanoramas = async(files, projectId) => {
         try {
             setIsLoading(true);
-            const response = await AddPanoramas(files, user_id);
+            const response = await AddPanoramas(files, projectId);
 
             return response;
 

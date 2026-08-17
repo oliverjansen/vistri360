@@ -1,5 +1,5 @@
 
-const BASE_URL = 'http://127.0.0.1:8080/api/';
+const BASE_URL = `${import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080/api'}`.replace(/\/$/, '') + '/';
 
 export const request = async (endpoint, options = {}) => {
     
@@ -12,6 +12,7 @@ export const request = async (endpoint, options = {}) => {
         headers:{
             'Accept': 'application/json',
             ...(!isFormdata && { 'Content-Type': 'application/json' }),
+            ...(localStorage.getItem('vistri_token') ? { Authorization: `Bearer ${localStorage.getItem('vistri_token')}` } : {}),
             ...(customConfig.headers || {}),
         },
         signal,
@@ -21,7 +22,9 @@ export const request = async (endpoint, options = {}) => {
     const response = await fetch(BASE_URL + endpoint, config);
 
     if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const error = new Error(`Request failed with status ${response.status}`);
+        error.status = response.status;
+        throw error;
     }
 
     return response.json();
