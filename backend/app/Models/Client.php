@@ -13,6 +13,6 @@ class Client extends Model
 
     public function projects()
     {
-        return $this->hasMany(Project::class);
+        return $this->morphedByMany(Project::class, 'projectable', 'client_projectable');
     }
 }

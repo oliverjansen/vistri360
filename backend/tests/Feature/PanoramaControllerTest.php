@@ -51,7 +51,7 @@ class PanoramaControllerTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::table('hotspot_panoramas')->insert([
+        DB::table('panorama_hotspots')->insert([
             'project_id' => $projectId,
             'panorama_id' => $panoramaId,
             'first_scene' => true,

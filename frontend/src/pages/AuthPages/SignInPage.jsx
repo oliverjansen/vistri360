@@ -7,13 +7,20 @@ const SignInPage = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState('user@vistri.test');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('example@gmail.com');
+  const [password, setPassword] = useState('example123');
   const [error, setError] = useState('');
 
   const handleSignIn = async (e) => {
     e.preventDefault();
-    try { const response = await login({ email, password }); localStorage.setItem('vistri_token', response.data.token); navigate(location.state?.from ?? '/dashboard', { replace: true }); } catch { setError('Sign in failed. Check your email and password.'); }
+    setError('');
+    try {
+      const response = await login({ email, password });
+      localStorage.setItem('vistri_token', response.data.token);
+      navigate(location.state?.from ?? '/dashboard', { replace: true });
+    } catch (requestError) {
+      setError(requestError.data?.message ?? 'Sign in failed. Please try again.');
+    }
   }
 
   return (

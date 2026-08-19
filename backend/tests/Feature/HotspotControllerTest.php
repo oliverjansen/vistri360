@@ -132,7 +132,7 @@ class HotspotControllerTest extends TestCase
         $this->assertArrayNotHasKey('first_scene', $savedDetails);
         $this->assertArrayNotHasKey('next_scene_id', $savedDetails);
         $this->assertSame($destinationId, DB::table('hotspots')->where('project_id', $projectId)->where('unique_id', 601)->value('next_panorama_id'));
-        $this->assertDatabaseHas('hotspot_panoramas', [
+        $this->assertDatabaseHas('panorama_hotspots', [
             'project_id' => $projectId,
             'panorama_id' => $destinationId,
             'first_scene' => false,
@@ -174,12 +174,12 @@ class HotspotControllerTest extends TestCase
             'panorama_id' => $secondPanoramaId,
             'unique_id' => 802,
         ]);
-        $this->assertDatabaseHas('hotspot_panoramas', [
+        $this->assertDatabaseHas('panorama_hotspots', [
             'project_id' => $projectId,
             'panorama_id' => $firstPanoramaId,
             'first_scene' => false,
         ]);
-        $this->assertDatabaseHas('hotspot_panoramas', [
+        $this->assertDatabaseHas('panorama_hotspots', [
             'project_id' => $projectId,
             'panorama_id' => $secondPanoramaId,
             'first_scene' => true,
@@ -270,7 +270,7 @@ class HotspotControllerTest extends TestCase
     {
         $projectId = $this->createProject('First scene removal project');
         $panoramaId = $this->createPanorama($projectId, 'only-scene.jpg');
-        DB::table('hotspot_panoramas')->insert([
+        DB::table('panorama_hotspots')->insert([
             'project_id' => $projectId,
             'panorama_id' => $panoramaId,
             'first_scene' => true,
@@ -284,7 +284,7 @@ class HotspotControllerTest extends TestCase
         ]));
 
         $response->assertOk();
-        $this->assertDatabaseHas('hotspot_panoramas', [
+        $this->assertDatabaseHas('panorama_hotspots', [
             'panorama_id' => $panoramaId,
             'project_id' => $projectId,
             'first_scene' => false,
@@ -295,7 +295,7 @@ class HotspotControllerTest extends TestCase
     {
         $projectId = $this->createProject('Registry removal project');
         $panoramaId = $this->createPanorama($projectId, 'only-scene.jpg');
-        DB::table('hotspot_panoramas')->insert([
+        DB::table('panorama_hotspots')->insert([
             'project_id' => $projectId,
             'panorama_id' => $panoramaId,
             'first_scene' => true,
@@ -317,7 +317,7 @@ class HotspotControllerTest extends TestCase
         ]));
 
         $response->assertOk();
-        $this->assertDatabaseMissing('hotspot_panoramas', [
+        $this->assertDatabaseMissing('panorama_hotspots', [
             'project_id' => $projectId,
             'panorama_id' => $panoramaId,
         ]);

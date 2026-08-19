@@ -17,4 +17,14 @@ class Panorama extends Model
     {
         return $this->hasOne(HotspotPanorama::class);
     }
+
+    public function groups()
+    {
+        return $this->belongsToMany(
+            Group::class,
+            'group_panoramas',
+            'panorama_id',
+            'group_id'
+        );
+    }
 }
