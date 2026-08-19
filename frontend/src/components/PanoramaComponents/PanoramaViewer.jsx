@@ -63,7 +63,7 @@ const PanoramaViewer = ({ projectId, clientId, clientName, backToProjects }) => 
   const [activePanorama, setActivePanorama] = useState(null);
   const [hotspots, setHotspots] = useState([]);
   const [removedHotspotIds, setRemovedHotspotIds] = useState([]);
-  const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(false);
+  const [isPanoramaFetchingLoading, setIsPanoramaFetchingLoading] = useState(true);
   const [successMessage, setSuccessMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [pendingLinkConfirmation, setPendingLinkConfirmation] = useState(null);
@@ -214,6 +214,8 @@ const PanoramaViewer = ({ projectId, clientId, clientName, backToProjects }) => 
 
       } catch (error) {
         console.error("Initialization error:", error);
+      } finally {
+        if (!cancelled && !selectedLocationId) setIsPanoramaFetchingLoading(false);
       }
     };
 
@@ -1737,7 +1739,7 @@ const handleSaveHotspot = async() => {
           panoramas={assetPanoramas}
           hotspots={hotspots}
           activePanoramaId={activePanorama?.id}
-          isFetching={isPanoramaFetchingLoading}
+          isFetching={false}
           uploadProjectId={hasProjectId ? normalizedProjectId : null}
           uploadGroupId={selectedLocationId}
           uploadClientId={clientId}
@@ -1757,6 +1759,7 @@ const handleSaveHotspot = async() => {
           <div className="pointer-events-none absolute inset-0 z-[1] bg-linear-to-t from-navy/70 via-transparent to-navy/10" />
           <div className="pointer-events-none absolute left-5 top-5 z-[2] max-w-[calc(100%-2.5rem)] truncate rounded-full border border-white/20 bg-navy/40 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-white/80 backdrop-blur-md">{activePanorama ? panoramaDescription(activePanorama) : "Select a scene"}{activePanorama && <><span className="mx-2 text-primary">/</span> Active view</>}</div>
           <button type="button" onClick={handleSetFirstScene} disabled={!activePanorama || isSettingFirstScene} className="pointer-events-auto absolute right-5 top-5 z-[3] rounded-full border border-white/20 bg-navy/60 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/80 backdrop-blur-md transition hover:border-primary hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50" title="Set the active scene as the default first scene">{isSettingFirstScene ? "Saving..." : "Set as first scene"}</button>
+          {isPanoramaFetchingLoading && <div className="absolute inset-0 z-[4] overflow-hidden bg-navy/75 backdrop-blur-sm"><div className="absolute left-5 top-5 h-8 w-44 rounded-full bg-white/10 animate-pulse" /><div className="absolute right-5 top-5 h-8 w-36 rounded-full bg-white/10 animate-pulse" /><div className="absolute inset-x-5 bottom-5 flex items-end justify-between gap-4 sm:inset-x-7 sm:bottom-7"><div className="w-56"><div className="h-2.5 w-28 rounded-full bg-primary/30 animate-pulse" /><div className="mt-3 h-6 w-48 rounded-lg bg-white/15 animate-pulse" /></div><div className="hidden h-9 w-28 rounded-full bg-white/10 animate-pulse sm:block" /></div><div className="absolute bottom-20 left-1/2 flex -translate-x-1/2 gap-3"><div className="h-14 w-20 rounded-xl border border-white/10 bg-white/10 animate-pulse" /><div className="h-14 w-20 rounded-xl border border-white/10 bg-white/10 animate-pulse" /><div className="h-14 w-20 rounded-xl border border-white/10 bg-white/10 animate-pulse" /></div></div>}
           <div ref={containerRef} className="relative min-h-[62vh] w-full flex-1 bg-navy lg:min-h-0" />
           {!activePanorama && <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center bg-navy px-6 text-center"><div className="rounded-2xl border border-white/20 bg-navy/75 px-6 py-5 shadow-2xl backdrop-blur-md"><p className="text-xs font-bold uppercase tracking-[0.25em] text-primary">First scene required</p><p className="mt-2 text-sm text-white/80">Choose a panorama asset to start this project.</p><button type="button" onClick={handleOpenAssetPicker} className="pointer-events-auto mt-3 rounded-xl bg-primary px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary/70">Select scene</button></div></div>}
           <PanoramaSceneStrip panoramas={stripPanoramas} hotspots={hotspots} selectedSceneIds={selectedSceneIds} hiddenSceneIds={hiddenSceneIds} linkedPanoramaIds={stripLinkedPanoramaIds} activePanorama={activePanorama} activePanoramaId={activePanorama?.id} onSelect={handleSelectStripPanorama} onRemove={handleHideSceneFromStrip} onOpenAssetPicker={handleOpenAssetPicker} />

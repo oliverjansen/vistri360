@@ -86,16 +86,19 @@ const ShareTourPage = () => {
         element.setAttribute("aria-label", isLink ? "Open linked scene" : `${hotspot.title || "Information"}: ${hotspot.description || "View information"}`);
         element.innerHTML = isLink
           ? '<span class="share-hotspot-arrow-row" aria-hidden="true"><i>⌃</i><i>⌃</i><i>⌃</i></span>'
-          : '<span class="share-hotspot-info-mark" aria-hidden="true">i</span>';
+          : '<span class="share-hotspot-info-mark" aria-hidden="true"></span>';
         if (!isLink) {
           const detail = document.createElement("span");
-          detail.className = "share-hotspot-detail";
+          const hasDescription = Boolean(hotspot.description?.trim());
+          detail.className = `share-hotspot-detail ${hasDescription ? "has-description" : "title-only"}`;
           const title = document.createElement("strong");
+          title.className = "share-hotspot-title";
           title.textContent = hotspot.title || "Information";
           const description = document.createElement("span");
+          description.className = "share-hotspot-description";
           description.textContent = hotspot.description || "";
           detail.append(title);
-          if (hotspot.description) detail.append(description);
+          if (hasDescription) detail.append(description);
           element.appendChild(detail);
         } else {
           element.addEventListener("click", () => {
