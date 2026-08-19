@@ -12,37 +12,52 @@ jobs:
     steps:
       - name: Deploy to Lightsail
         env:
-          HOST: ${{ secrets.SERVER_HOST }}
-          USER: ${{ secrets.SERVER_USER }}
-          KEY: ${{ secrets.SERVER_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_KEY: ${{ secrets.SERVER_KEY }}
         run: |
+          set -e
+
           mkdir -p ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/key.pem
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/key.pem
           chmod 600 ~/.ssh/key.pem
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-          ssh -i ~/.ssh/key.pem "$USER@$HOST" << 'EOF'
-            set -e
+          ssh -i ~/.ssh/key.pem "$SERVER_USER@$SERVER_HOST" << 'EOF'
+            set -euxo pipefail
 
+            printf 'STEP 1: Pulling repository\n'
             cd /var/www/myapp
+            git pull --ff-only origin main
 
-            git pull origin main
+            printf 'STEP 2: Stopping MySQL\n'
+            sudo -n systemctl stop mysql
 
-            # Temporarily stop MySQL
-            sudo systemctl stop mysql
+            # Restart MySQL automatically if frontend deployment fails
+            trap 'sudo -n systemctl start mysql || true' EXIT
 
+            printf 'STEP 3: Installing frontend dependencies\n'
             cd frontend
             npm install
+
+            printf 'STEP 4: Building frontend\n'
             npm run build
 
-            # Start MySQL again after deployment
-            sudo systemctl start mysql
+            printf 'STEP 5: Starting MySQL\n'
+            sudo -n systemctl start mysql
+            trap - EXIT
 
+            printf 'STEP 6: Installing Laravel dependencies\n'
             cd ../backend
-            composer install --no-dev --optimize-autoloader
-            php artisan migrate
+            composer install \
+              --no-dev \
+              --optimize-autoloader \
+              --no-interaction
+
+            printf 'STEP 7: Optimizing Laravel\n'
             php artisan optimize:clear
             php artisan config:cache
             php artisan queue:restart || true
 
+            printf 'DEPLOYMENT SUCCESSFUL\n'
           EOF
