@@ -10,27 +10,34 @@ const isNavigationHotspot = (hotspot) => (
   hotspot?.type === "LINK" || hotspot?.type === "NAVIGATION"
 );
 
-const PanoramaSceneStrip = ({ panoramas = [], hotspots = [], selectedSceneIds = [], hiddenSceneIds = [], activePanoramaId, onSelect, onRemove }) => {
+const PanoramaSceneStrip = ({ panoramas = [], hotspots = [], selectedSceneIds = [], hiddenSceneIds = [], linkedPanoramaIds = [], activePanorama, activePanoramaId, onSelect, onRemove, onOpenAssetPicker }) => {
   const navigationHotspots = hotspots.filter(isNavigationHotspot);
   const linkedSceneIds = new Set(
     navigationHotspots
       .map((hotspot) => String(hotspot.next_panorama_id ?? ""))
       .filter(Boolean)
   );
-  const hasActiveScene = activePanoramaId !== null && activePanoramaId !== undefined;
-  // When the project has registered scenes but no first_scene, the strip is
-  // the scene entry point. Do not expose every uploaded asset as a scene.
-  const hasRegisteredScenes = selectedSceneIds.length > 0;
-  const visiblePanoramas = panoramas.filter((panorama) => (
-    !hiddenSceneIds.includes(String(panorama.id)) && (
-      (!hasActiveScene && !hasRegisteredScenes) ||
-      Number(activePanoramaId) === Number(panorama.id) ||
-      selectedSceneIds.includes(String(panorama.id)) ||
-      linkedSceneIds.has(String(panorama.id))
-    )
-  ));
+  // Keep one card per panorama. Duplicate records can otherwise reuse the
+  // same React key and make a newly linked scene render over the first card.
+  const linkedIds = new Set(linkedPanoramaIds.map((id) => String(id)));
+  const visiblePanoramas = Array.from(
+    new Map(
+      [...panoramas, ...(activePanorama ? [activePanorama] : [])]
+        .filter((panorama) => (
+          !hiddenSceneIds.includes(String(panorama.id)) && (
+            Number(activePanoramaId) === Number(panorama.id) ||
+            selectedSceneIds.includes(String(panorama.id)) ||
+            linkedSceneIds.has(String(panorama.id)) ||
+            linkedIds.has(String(panorama.id))
+          )
+        ))
+        .map((panorama) => [String(panorama.id), panorama])
+    ).values()
+  );
 
-  if (visiblePanoramas.length === 0) return null;
+  if (visiblePanoramas.length === 0) {
+    return null;
+  }
 
   return (
   <div className="pointer-events-auto absolute bottom-3 left-1/2 z-[4] w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 sm:bottom-5 sm:w-[calc(100%-3rem)]">
@@ -48,7 +55,7 @@ const PanoramaSceneStrip = ({ panoramas = [], hotspots = [], selectedSceneIds = 
                   <span className={`block text-[8px] ${isActive ? "text-primary" : "text-surface/60"}`}>{isActive ? "Active" : "Open"}</span>
                 </span>
               </button>
-              <button type="button" onClick={(event) => { event.stopPropagation(); onRemove?.(panorama); }} className="absolute right-1 top-1 z-[1] flex h-5 w-5 items-center justify-center rounded-full bg-navy/80 text-xs font-bold text-white/80 transition hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary/80" aria-label={`Remove ${sceneLabel(panorama, index)} from scene strip`}>×</button>
+              {!linkedIds.has(String(panorama.id)) && <button type="button" onClick={(event) => { event.stopPropagation(); onRemove?.(panorama); }} className="absolute right-1 top-1 z-[1] flex h-5 w-5 items-center justify-center rounded-full bg-navy/80 text-xs font-bold text-white/80 transition hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary/80" aria-label={`Remove ${sceneLabel(panorama, index)} from scene strip`}>×</button>}
             </div>
           );
         })}

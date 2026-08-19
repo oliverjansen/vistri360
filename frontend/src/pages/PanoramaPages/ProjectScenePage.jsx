@@ -23,7 +23,7 @@ const ProjectScenePage = () => {
 
   return (
     <main className="relative min-h-screen bg-navy">
-      {isLoading ? <SceneSkeleton /> : <PanoramaViewer projectId={Number(projectId)} clientName={project?.name} backToProjects={"/dashboard/clients/" + (project?.client_id ?? "")} />}
+      {isLoading ? <SceneSkeleton /> : <PanoramaViewer projectId={Number(projectId)} clientId={project?.client_id} clientName={project?.name} backToProjects={"/dashboard/clients/" + (project?.client_id ?? "")} />}
     </main>
   );
 };

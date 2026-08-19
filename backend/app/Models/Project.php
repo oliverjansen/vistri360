@@ -15,9 +15,14 @@ class Project extends Model
         return $this->belongsTo(Client::class);
     }
 
+    public function clients()
+    {
+        return $this->morphToMany(Client::class, 'projectable', 'client_projectable');
+    }
+
     public function hotspots()
     {
-        return $this->hasMany(Hotspot::class);
+        return $this->hasManyThrough(Hotspot::class, Panorama::class, 'project_id', 'panorama_id');
     }
 
     public function projectImages(){
@@ -27,6 +32,11 @@ class Project extends Model
     public function panoramas()
     {
         return $this->hasMany(Panorama::class);
+    }
+
+    public function groups()
+    {
+        return $this->belongsToMany(Group::class, 'project_groups', 'project_id', 'group_id');
     }
 
 }

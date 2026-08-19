@@ -10,14 +10,16 @@ export const getHotSpot = async (payload) => {
     }
 };
 
-export const saveHotspots = async (payload) => {
+export const saveProject = async (projectId, payload) => {
     try {
-        return await request("projects/hotspots/updateHotspost", {
+        return await request(`projects/${projectId}`, {
             method: "PUT",
             body: JSON.stringify(payload),
         });
     } catch (error) {
-        console.error("Error saving hotspot coordinates", error);
+        console.error("Error saving project panorama data", error);
         throw error;
     }
 };
+
+export const saveHotspots = (payload) => saveProject(payload.project_id, payload);

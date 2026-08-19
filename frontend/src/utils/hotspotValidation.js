@@ -65,6 +65,7 @@ export const mergeSceneHotspots = (registryHotspots, localSceneHotspots) => {
 
 export const buildHotspotPayload = (hotspot, projectId, panoramaId) => {
   const {
+    project_id: _legacyProjectId,
     next_scene_path: _legacyPath,
     next_scene_id: _legacyId,
     first_scene: _legacyFirstScene,
@@ -84,7 +85,6 @@ export const buildHotspotPayload = (hotspot, projectId, panoramaId) => {
   const type = String(hotspot.type || cleanNestedDetails.type || "").toUpperCase();
 
   return {
-    project_id: projectId,
     panorama_id: panoramaId,
     unique_id: hotspot.unique_id,
     type,

@@ -1,0 +1,48 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Lightsail
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          KEY: ${{ secrets.SERVER_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/key.pem "$USER@$HOST" << 'EOF'
+            set -e
+
+            cd /var/www/myapp
+
+            git pull origin main
+
+            # Temporarily stop MySQL
+            sudo systemctl stop mysql
+
+            cd frontend
+            npm install
+            npm run build
+
+            # Start MySQL again after deployment
+            sudo systemctl start mysql
+
+            cd ../backend
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan queue:restart || true
+
+          EOF

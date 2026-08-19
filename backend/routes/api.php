@@ -34,7 +34,8 @@ Route::prefix('projects')->group(function () {
 
     Route::controller(HotspotController::class)->prefix('hotspots')->group(function () {
         Route::get('/', 'index');
-        Route::put('/updateHotspost', 'updateHotspost');
+        Route::put('/updateProject', 'updateProject');
+        Route::put('/updateHotspost', 'updateProject');
         Route::delete('/deleteHotspot', 'delete');
         Route::controller(HotspotImageController::class)->prefix('images')->group(function () {
             Route::get('/', 'index');
@@ -43,6 +44,7 @@ Route::prefix('projects')->group(function () {
 
     // projects routes
     Route::get('/{project}', [ProjectController::class, 'show']);
+    Route::put('/{project}', [ProjectController::class, 'update']);
 });
 
 Route::prefix('clients')->controller(ClientController::class)->group(function () {
@@ -57,6 +59,11 @@ Route::prefix('clients')->controller(ClientController::class)->group(function ()
 Route::prefix('panorama')->group(function () {
     Route::controller(PanoramaController::class)->group(function () {
         Route::post('upload', 'upload');
+        Route::get('/projects/{projectId}/groups', 'groups');
+        Route::post('/projects/{projectId}/groups', 'storeGroup');
+        Route::patch('/projects/{projectId}/groups/{groupId}', 'updateGroup');
+        Route::delete('/projects/{projectId}/groups/{groupId}', 'destroyGroup');
+        Route::post('/{panorama}/attach', 'attach');
         Route::get('/{panorama}', 'show');
         Route::get('/', 'index');
     });

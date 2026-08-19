@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class HotspotPanorama extends Model
 {
+    protected $table = 'panorama_hotspots';
+
     protected $fillable = ['panorama_id', 'project_id', 'first_scene'];
 
     protected $casts = [

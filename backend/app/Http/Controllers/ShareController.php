@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Hotspot;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -68,34 +67,21 @@ class ShareController extends Controller
 
     private function snapshot(Project $project): array
     {
-        $project->load('panoramas.hotspotPanorama');
-        $hotspots = Hotspot::where('project_id', $project->id)->get()->map(function ($hotspot) {
-            $details = is_array($hotspot->details) ? $hotspot->details : [];
-
-            return [
-                'panorama_id' => $hotspot->panorama_id,
-                'next_panorama_id' => $hotspot->next_panorama_id,
-                'type' => $details['type'] ?? $hotspot->type ?? null,
-                'yaw' => $details['yaw'] ?? null,
-                'pitch' => $details['pitch'] ?? null,
-                'rotation' => $details['rotation'] ?? 0,
-                'title' => $details['title'] ?? '',
-                'description' => $details['description'] ?? '',
-            ];
-        })->values();
+        $project->load([
+            'groups' => fn ($query) => $query
+                ->select(['groups.id', 'groups.name'])
+                ->with(['panoramas' => fn ($panoramaQuery) => $panoramaQuery
+                    ->select(['panoramas.id', 'panoramas.project_id', 'panoramas.image_path'])
+                    ->with(['hotspotPanorama' => fn ($registryQuery) => $registryQuery
+                        ->select(['panorama_id', 'first_scene'])
+                        ->with(['hotspots:panorama_id,next_panorama_id,type,yaw,pitch,rotation,title,description'])
+                    ])
+                ]),
+        ]);
 
         return [
             'project' => ['name' => $project->name],
-            // The scene strip is the source of truth for a tour. The manual
-            // save creates one hotspot_panorama row for every included scene.
-            'panoramas' => $project->panoramas
-                ->filter(fn ($panorama) => $panorama->hotspotPanorama !== null)
-                ->map(fn ($panorama) => [
-                'id' => $panorama->id,
-                'image_path' => $panorama->image_path,
-                'first_scene' => (bool) optional($panorama->hotspotPanorama)->first_scene,
-                ])->values(),
-            'hotspots' => $hotspots,
+            'groups' => $project->groups,
         ];
     }
 

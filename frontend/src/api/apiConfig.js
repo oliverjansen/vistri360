@@ -6,6 +6,7 @@ export const request = async (endpoint, options = {}) => {
     //stop request if signal is aborted and get the custom config
     const {signal, ...customConfig} = options;
     const isFormdata = customConfig.body instanceof FormData;
+    const requestMethod = (customConfig.method ?? 'GET').toUpperCase();
 
     const config = {
         method: 'GET',
@@ -15,6 +16,9 @@ export const request = async (endpoint, options = {}) => {
             ...(localStorage.getItem('vistri_token') ? { Authorization: `Bearer ${localStorage.getItem('vistri_token')}` } : {}),
             ...(customConfig.headers || {}),
         },
+        // Panorama and group reads must reflect uploads immediately. Prevent
+        // the browser from reusing an older JSON response.
+        ...(requestMethod === 'GET' ? { cache: 'no-store' } : {}),
         signal,
         ...customConfig,
     };
@@ -24,6 +28,7 @@ export const request = async (endpoint, options = {}) => {
     if (!response.ok) {
         const error = new Error(`Request failed with status ${response.status}`);
         error.status = response.status;
+        error.data = await response.json().catch(() => null);
         throw error;
     }
 
