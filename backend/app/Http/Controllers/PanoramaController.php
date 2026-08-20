@@ -30,7 +30,7 @@ class PanoramaController extends Controller
 
         try {
             $panoramas = Panorama::query()
-                ->select(['id', 'user_id', 'project_id', 'image_path', 'created_at', 'updated_at'])
+                ->select(['id', 'user_id', 'project_id', 'image_path', 'name', 'created_at', 'updated_at'])
                 ->with([
                     'project:id,name,client_id',
                     'project.client:id,name',
@@ -80,7 +80,7 @@ class PanoramaController extends Controller
                 ->when($request->user(), fn ($panoramaQuery) => $panoramaQuery->where('panoramas.user_id', $request->user()->id));
         }])
             ->with(['panoramas' => function ($query) use ($projectId, $request) {
-                $query->select(['panoramas.id', 'panoramas.user_id', 'panoramas.project_id', 'panoramas.image_path', 'panoramas.created_at', 'panoramas.updated_at'])
+                $query->select(['panoramas.id', 'panoramas.user_id', 'panoramas.project_id', 'panoramas.image_path', 'panoramas.name', 'panoramas.created_at', 'panoramas.updated_at'])
                     ->where('panoramas.project_id', $projectId)
                     ->when($request->user(), fn ($panoramaQuery) => $panoramaQuery->where('panoramas.user_id', $request->user()->id))
                     ->with(['hotspotPanorama' => function ($hotspotPanoramaQuery) {
@@ -261,6 +261,26 @@ class PanoramaController extends Controller
         }
     }
 
+    public function updateName(Request $request, Panorama $panorama)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+        ]);
+
+        $user = $request->user();
+        if (!$user || (int) $panorama->user_id !== (int) $user->id) {
+            return response()->json(['message' => 'You can only rename panoramas that you uploaded.'], 403);
+        }
+
+        $panorama->name = trim($validated['name']);
+        $panorama->save();
+
+        return response()->json([
+            'message' => 'Panorama name updated successfully',
+            'data' => $panorama->load(['groups:id,name']),
+        ]);
+    }
+
     public function upload(Request $request)
     {
         $validated = $request->validate([
@@ -322,6 +342,7 @@ class PanoramaController extends Controller
                     basename($pano->getClientOriginalName()),
                     'public'
                 ),
+                'name' => pathinfo($pano->getClientOriginalName(), PATHINFO_FILENAME),
                 'created_at' => $uploadedAt,
                 'updated_at' => $uploadedAt,
             ])->all();

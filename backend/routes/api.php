@@ -65,6 +65,7 @@ Route::prefix('panorama')->group(function () {
         Route::delete('/projects/{projectId}/groups/{groupId}', 'destroyGroup');
         Route::post('/{panorama}/attach', 'attach');
         Route::get('/{panorama}', 'show');
+        Route::patch('/{panorama}', 'updateName');
         Route::get('/', 'index');
     });
 });
