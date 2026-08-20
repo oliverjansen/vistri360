@@ -67,6 +67,11 @@ export const showPanorama = async (user_id) => {
     }
 }
 
+export const updatePanoramaName = (panoramaId, name) => request(`panorama/${panoramaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+}).finally(clearPanoramaRequestCache);
+
 export const getPanoramaGroups = (projectId, clientId) => {
     const query = clientId ? `?client_id=${encodeURIComponent(clientId)}` : "";
     return requestPanoramaOnce(`groups:${projectId}:${clientId ?? ""}`, `panorama/projects/${projectId}/groups${query}`);

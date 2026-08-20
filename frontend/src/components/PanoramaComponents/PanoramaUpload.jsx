@@ -83,10 +83,11 @@ const PanoramaUpload = ({
 
   return (
     <label className="relative flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-primary px-4 text-[11px] font-bold uppercase tracking-widest text-white transition duration-300 hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 focus-within:ring-2 focus-within:ring-primary/60">
-      <Loading isLoading={isLoading} />
-      <span>{isLoading ? "Uploading..." : "Upload 360 view"}</span>
-      <input type="file" multiple disabled={isLoading} accept="image/*" className="hidden" onChange={handleChange} />
-    </label>
+        <Loading isLoading={isLoading} />
+        <span>{isLoading ? "Uploading..." : "Upload 360 view"}</span>
+        <input type="file" multiple disabled={isLoading} accept="image/*" className="hidden" onChange={handleChange} />
+      </label>
+    
   );
 };
 

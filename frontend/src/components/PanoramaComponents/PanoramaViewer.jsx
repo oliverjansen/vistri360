@@ -804,6 +804,31 @@ const handlePanoramasUploaded = (uploadedImages, files) => {
   
 };
 
+const handlePanoramaRenamed = (updatedPanorama) => {
+  if (!updatedPanorama?.id) return;
+  const updateName = (panorama) => (
+    Number(panorama.id) === Number(updatedPanorama.id)
+      ? { ...panorama, name: updatedPanorama.name }
+      : panorama
+  );
+
+  const updatedAssets = assetPanoramasRef.current.map(updateName);
+  assetPanoramasRef.current = updatedAssets;
+  setAssetPanoramas(updatedAssets);
+
+  const updatedGroupPanoramas = panoramasRef.current.map(updateName);
+  panoramasRef.current = updatedGroupPanoramas;
+  setPanoramas(updatedGroupPanoramas);
+  locationsRef.current = locationsRef.current.map((group) => ({
+    ...group,
+    panoramas: (group.panoramas ?? []).map(updateName),
+  }));
+  setLocations(locationsRef.current);
+  setActivePanorama((previous) => previous && Number(previous.id) === Number(updatedPanorama.id)
+    ? { ...previous, name: updatedPanorama.name }
+    : previous);
+};
+
 const handleSelectAssetPanorama = async (panorama) => {
   if (!panorama?.id || !selectedLocationId || isPanoramaFetchingLoading) return;
 
@@ -1777,6 +1802,7 @@ const handleSaveHotspot = async() => {
           currentGroupPanoramas={locations.find((group) => Number(group.id) === Number(selectedLocationId))?.panoramas ?? []}
           allGroupPanoramas={locations.flatMap((group) => group.panoramas ?? [])}
           onUploaded={handlePanoramasUploaded}
+          onPanoramaRenamed={handlePanoramaRenamed}
           onUploadError={setValidationMessage}
           onSelect={handleSelectAssetPanorama}
           isHighlighted={isAssetLibraryHighlighted}
