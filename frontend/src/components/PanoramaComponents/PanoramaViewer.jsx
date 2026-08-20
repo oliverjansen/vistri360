@@ -89,6 +89,7 @@ const PanoramaViewer = ({ projectId, clientId, clientName, backToProjects }) => 
     sceneHotspotsRef.current[String(panoramaId)] = sceneHotspots ?? [];
   };
 
+
   useEffect(() => {
     hotspotsRef.current = hotspots;
   }, [hotspots]);
@@ -464,11 +465,7 @@ const addHotspot = (coords, hotspotType = 'INFO') => {
               ))
             : null;
           if (destinationGroup) {
-            setPendingLinkConfirmation({
-              panorama: selectedPanorama,
-              hotspotId: unique_id,
-              group: destinationGroup,
-            });
+            handleSelectNextScene(selectedPanorama, unique_id);
             ImagesContainer.style.display = 'none';
             if (openPickerRef.current === ImagesContainer) openPickerRef.current = null;
             return;
@@ -853,14 +850,6 @@ const handleSelectAssetPanorama = async (panorama) => {
     ));
     setLocations(locationsRef.current);
     await handleSelectPanorama(selectedPanorama);
-    Object.entries(pendingGroupRemovalsRef.current).forEach(([groupId, panoramaIds]) => {
-      const remainingIds = panoramaIds.filter((panoramaId) => Number(panoramaId) !== Number(panorama.id));
-      if (remainingIds.length > 0) {
-        pendingGroupRemovalsRef.current[groupId] = remainingIds;
-      } else {
-        delete pendingGroupRemovalsRef.current[groupId];
-      }
-    });
     setValidationMessage("");
   } catch (error) {
     console.error("Unable to select panorama asset", error);
@@ -984,7 +973,7 @@ const handleSaveHotspot = async() => {
    const currentSceneId = panoramaRef.current;
    const localSceneHotspots = {
      ...sceneHotspotsRef.current,
-     [String(currentSceneId)]: hotspots,
+     [String(currentSceneId)]: hotspotsRef.current,
    };
    const allRegisteredAndLocalHotspots = mergeSceneHotspots(persistedHotspots, localSceneHotspots)
      .filter((hotspot) => (
@@ -993,7 +982,7 @@ const handleSaveHotspot = async() => {
        !removedPanoramaSet.has(String(hotspot.panorama_id ?? ""))
      ));
    const currentById = new Map(
-     hotspots
+     hotspotsRef.current
        .filter((hotspot) => hotspot?.unique_id !== undefined && hotspot?.unique_id !== null)
        .filter((hotspot) => !removedPanoramaSet.has(String(hotspot.panorama_id ?? currentSceneId)))
        .map((hotspot) => [String(hotspot.unique_id), {
@@ -1258,6 +1247,11 @@ const handleSaveHotspot = async() => {
 
       if (isCancelled()) return;
 
+    const activeHotspotContainer = sceneRef.current?.hotspotContainer();
+    activeHotspotContainer?.listHotspots().forEach((hotspot) => {
+      activeHotspotContainer.destroyHotspot(hotspot);
+    });
+
     const registeredPanorama = panoramasRef.current.find((panorama) => (
         Number(panorama.id) === Number(panoramaId)
       )) ?? assetPanoramasRef.current.find((panorama) => (
@@ -1439,14 +1433,24 @@ const handleSaveHotspot = async() => {
     }
   };
 
-  const handleHideSceneFromStrip = (panorama) => {
+  const handleHideSceneFromStrip = async (panorama) => {
     if (!panorama?.id) return;
     const destinationId = String(panorama.id);
     const nextHotspots = removeHotspotsForDestinations(hotspotsRef.current, [destinationId]);
+    sceneHotspotsRef.current = Object.fromEntries(
+      Object.entries(sceneHotspotsRef.current).map(([sceneId, sceneHotspots]) => (
+        [sceneId, removeHotspotsForDestinations(sceneHotspots, [destinationId])]
+      ))
+    );
     const wasActiveScene = Number(panoramaRef.current) === Number(panorama.id);
     const updatedGroupPanoramas = panoramasRef.current.filter((item) => (
       String(item.id) !== destinationId
     ));
+
+    document.querySelectorAll(`.panorama-scene-option[data-panorama-id="${destinationId}"]`).forEach((option) => {
+      option.classList.remove("selected-panorama-image");
+      option.setAttribute("aria-label", "Select next scene");
+    });
 
     hotspotsRef.current = nextHotspots;
     rememberSceneHotspots(panoramaRef.current, nextHotspots);
@@ -1460,21 +1464,44 @@ const handleSaveHotspot = async() => {
       Number(group.id) === Number(selectedLocationId)
         ? {
             ...group,
-            panoramas: updatedGroupPanoramas,
+            panoramas: updatedGroupPanoramas.map((item) => item.hotspot_panorama
+              ? {
+                  ...item,
+                  hotspot_panorama: {
+                    ...item.hotspot_panorama,
+                    hotspots: removeHotspotsForDestinations(item.hotspot_panorama.hotspots, [destinationId]),
+                  },
+                }
+              : item),
             panoramas_count: updatedGroupPanoramas.length,
           }
-        : group
+        : {
+            ...group,
+            panoramas: (group.panoramas ?? []).map((item) => item.hotspot_panorama
+              ? {
+                  ...item,
+                  hotspot_panorama: {
+                    ...item.hotspot_panorama,
+                    hotspots: removeHotspotsForDestinations(item.hotspot_panorama.hotspots, [destinationId]),
+                  },
+                }
+              : item),
+          }
     ));
     setLocations(locationsRef.current);
     setAssetPanoramas((previous) => {
-      const updatedAssets = previous.map((asset) => (
-        Number(asset.id) === Number(panorama.id)
+      const updatedAssets = previous.map((asset) => ({
+        ...asset,
+        ...(Number(asset.id) === Number(panorama.id)
+          ? { groups: (asset.groups ?? []).filter((group) => Number(group.id) !== Number(selectedLocationId)) }
+          : {}),
+        hotspot_panorama: asset.hotspot_panorama
           ? {
-              ...asset,
-              groups: (asset.groups ?? []).filter((group) => Number(group.id) !== Number(selectedLocationId)),
+              ...asset.hotspot_panorama,
+              hotspots: removeHotspotsForDestinations(asset.hotspot_panorama.hotspots, [destinationId]),
             }
-          : asset
-      ));
+          : asset.hotspot_panorama,
+      }));
       assetPanoramasRef.current = updatedAssets;
       return updatedAssets;
     });
@@ -1487,6 +1514,10 @@ const handleSaveHotspot = async() => {
       ...(pendingGroupRemovalsRef.current[currentGroupKey] ?? []),
       Number(panorama.id),
     ]));
+
+    if (!wasActiveScene && panoramaRef.current) {
+      await handleGetHotspots(panoramaRef.current);
+    }
 
     if (wasActiveScene) {
       const replacementScene = updatedGroupPanoramas[0];
@@ -1743,6 +1774,8 @@ const handleSaveHotspot = async() => {
           uploadProjectId={hasProjectId ? normalizedProjectId : null}
           uploadGroupId={selectedLocationId}
           uploadClientId={clientId}
+          currentGroupPanoramas={locations.find((group) => Number(group.id) === Number(selectedLocationId))?.panoramas ?? []}
+          allGroupPanoramas={locations.flatMap((group) => group.panoramas ?? [])}
           onUploaded={handlePanoramasUploaded}
           onUploadError={setValidationMessage}
           onSelect={handleSelectAssetPanorama}
