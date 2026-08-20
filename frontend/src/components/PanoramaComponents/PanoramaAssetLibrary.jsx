@@ -10,12 +10,18 @@ const panoramaFilename = (panorama) => (
   panorama?.image_path?.split("/").pop() || `panorama-${panorama?.id}`
 );
 
-const PanoramaAssetLibrary = ({ id, panoramas, hotspots = [], activePanoramaId, isFetching, uploadProjectId, uploadGroupId, uploadClientId, onUploaded, onUploadError, onSelect, isHighlighted = false }) => {
+const PanoramaAssetLibrary = ({ id, panoramas, hotspots = [], activePanoramaId, isFetching, uploadProjectId, uploadGroupId, uploadClientId, currentGroupPanoramas = [], allGroupPanoramas = [], onUploaded, onUploadError, onSelect, isHighlighted = false }) => {
   const navigationHotspots = hotspots.filter(isNavigationHotspot);
   const linkedSceneIds = new Set(
     navigationHotspots
       .map((hotspot) => String(hotspot.next_panorama_id ?? ""))
       .filter(Boolean)
+  );
+  const currentGroupPanoramaIds = new Set(
+    currentGroupPanoramas.map((panorama) => String(panorama.id))
+  );
+  const allGroupPanoramaIds = new Set(
+    allGroupPanoramas.map((panorama) => String(panorama.id))
   );
 
   const filteredPanoramas = panoramas;
@@ -44,16 +50,17 @@ const PanoramaAssetLibrary = ({ id, panoramas, hotspots = [], activePanoramaId, 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
             {filteredPanoramas.map((panorama) => {
             const isLinked = linkedSceneIds.has(String(panorama.id));
-              const isInOtherGroup = (panorama.groups ?? []).some((group) => (
-                Number(group.id) !== Number(uploadGroupId)
-              ));
+              const isInAnyGroup = currentGroupPanoramaIds.has(String(panorama.id))
+                || allGroupPanoramaIds.has(String(panorama.id))
+                || (panorama.groups ?? []).length > 0;
+              const isIncluded = isLinked || isInAnyGroup;
 
               return (
-                <div key={panorama.id} className={`group relative overflow-hidden rounded-xl border bg-white/5 text-left transition ${isLinked ? "border-primary ring-2 ring-primary/40" : "border-white/10"}`}>
+                <div key={panorama.id} className={`group relative overflow-hidden rounded-xl border bg-white/5 text-left transition ${isIncluded ? "border-primary ring-2 ring-primary/40" : "border-white/10"}`}>
                   <img src={storageFormat(panorama.image_path)} alt={`Panorama asset ${panorama.id}`} className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" />
-                  <p className={`truncate px-2 py-2 text-[9px] font-bold tracking-wider ${isLinked ? "text-primary" : "text-surface/50"}`} title={panoramaFilename(panorama)}>{panoramaFilename(panorama)}</p>
-                  {!activePanoramaId && !isInOtherGroup && <button type="button" onClick={() => onSelect?.(panorama)} className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-lg bg-primary/90 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white transition hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary/70">Select scene</button>}
-                  {isLinked && <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-lg" aria-hidden="true">&#10003;</span>}
+                  <p className={`truncate px-2 py-2 text-[9px] font-bold tracking-wider ${isIncluded ? "text-primary" : "text-surface/50"}`} title={panoramaFilename(panorama)}>{panoramaFilename(panorama)}</p>
+                  {!activePanoramaId && !isInAnyGroup && <button type="button" onClick={() => onSelect?.(panorama)} className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-lg bg-primary/90 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white transition hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary/70">Select scene</button>}
+                  {isIncluded && <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-lg" aria-hidden="true">&#10003;</span>}
                 </div>
               );
             })}
