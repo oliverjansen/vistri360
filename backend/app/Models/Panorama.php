@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Panorama extends Model
 {
-    protected $fillable = ['user_id', 'project_id', 'image_path'];
+    protected $fillable = ['user_id', 'project_id', 'image_path', 'name'];
 
     public function project()
     {

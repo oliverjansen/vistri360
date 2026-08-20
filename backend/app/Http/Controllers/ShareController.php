@@ -71,7 +71,7 @@ class ShareController extends Controller
             'groups' => fn ($query) => $query
                 ->select(['groups.id', 'groups.name'])
                 ->with(['panoramas' => fn ($panoramaQuery) => $panoramaQuery
-                    ->select(['panoramas.id', 'panoramas.project_id', 'panoramas.image_path'])
+                    ->select(['panoramas.id', 'panoramas.project_id', 'panoramas.image_path', 'panoramas.name'])
                     ->with(['hotspotPanorama' => fn ($registryQuery) => $registryQuery
                         ->select(['panorama_id', 'first_scene'])
                         ->with(['hotspots:panorama_id,next_panorama_id,type,yaw,pitch,rotation,title,description'])
